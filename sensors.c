@@ -53,14 +53,12 @@ uint8_t read_byte_pcf() {
 
 // check for pressed buttons
 void pcf_task(void *pvParameters) {
-
 	uint8_t pcf_byte;
 
 	// turn off all leds
 	write_byte_pcf(leds_off);
 
 	while (1) {
-
 		pcf_byte = read_byte_pcf();
 
 		// button 1 is pressed
@@ -109,24 +107,26 @@ uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
 
 // check MPU-9250 sensor values
 void mpu_task(void *pvParameters) {
-
 	uint16_t threshold = 10000;
 
 	while (1) {
+		int accelometer_x = read_bytes_mpu(MPU9250_ACCEL_X);
+		int accelometer_y = read_bytes_mpu(MPU9250_ACCEL_Y);
+		int accelometer_z = read_bytes_mpu(MPU9250_ACCEL_Z);
+
+		int gyroscope_x = read_bytes_mpu(MPU9250_GYRO_X);
+		int gyroscope_y = read_bytes_mpu(MPU9250_GYRO_Y);
+		int gyroscope_z = read_bytes_mpu(MPU9250_GYRO_Z);
+
 
 		// turn off Wemos led
 		gpio_write(gpio_wemos_led, 1);
-		printf("Accel_z: %d \n", read_bytes_mpu(MPU9250_ACCEL_Z));
-		printf("Accel_x: %d \n", read_bytes_mpu(MPU9250_ACCEL_X));
-		printf("Accel_y: %d \n", read_bytes_mpu(MPU9250_ACCEL_Y));
-		printf("Gyro_z: %d \n", read_bytes_mpu(MPU9250_GYRO_Z));
-		printf("Gyro_x: %d \n", read_bytes_mpu(MPU9250_GYRO_X));
-		printf("Gyro_y: %d \n", read_bytes_mpu(MPU9250_GYRO_Y));
-
-		if (read_bytes_mpu(MPU9250_ACCEL_Z) < threshold)
-			// turn on Wemos led
-
-			gpio_write(gpio_wemos_led, 0);
+		printf("Accel_x: %d \n", accelometer_x);
+		printf("Accel_y: %d \n", accelometer_y);
+		printf("Accel_z: %d \n", accelometer_z);
+		printf("Gyro_x: %d \n", gyroscope_x);
+		printf("Gyro_y: %d \n", gyroscope_y);
+		printf("Gyro_z: %d \n", gyroscope_z);
 
 		// check again after 100 ms
 		vTaskDelay(pdMS_TO_TICKS(100));
