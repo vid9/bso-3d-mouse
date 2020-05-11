@@ -119,6 +119,9 @@ void mpu_task(void *pvParameters) {
 		printf("Accel_z: %d \n", read_bytes_mpu(MPU9250_ACCEL_Z));
 		printf("Accel_x: %d \n", read_bytes_mpu(MPU9250_ACCEL_X));
 		printf("Accel_y: %d \n", read_bytes_mpu(MPU9250_ACCEL_Y));
+		printf("Gyro_z: %d \n", read_bytes_mpu(MPU9250_GYRO_Z));
+		printf("Gyro_x: %d \n", read_bytes_mpu(MPU9250_GYRO_X));
+		printf("Gyro_y: %d \n", read_bytes_mpu(MPU9250_GYRO_Y));
 
 		if (read_bytes_mpu(MPU9250_ACCEL_Z) < threshold)
 			// turn on Wemos led
