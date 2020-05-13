@@ -1,14 +1,16 @@
+//#include <stdio.h>
+#include <math.h>
+#include <stdlib.h>
+//#include <sys/time.h>
+//#include <stdbool.h>
+//#include <stdint.h>
+//#include <string.h>
 #include "espressif/esp_common.h"
 #include "esp/uart.h"
+#include "i2c/i2c.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "i2c/i2c.h"
-#include <stdio.h>
-#include <math.h>
-#include <sys/time.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
+
 #include "Kalman.h"
 
 const double RAD_TO_DEG = 57.29577951;
@@ -123,7 +125,7 @@ float kalman_get_angle(kalman * p_kalman, float newAngle, float newRate, float d
 void setAngle(kalman * p_kalman , float angle) {
 	p_kalman->angle=angle;
 }
-
+/*
 // write byte to PCF on I2C bus
 void write_byte_pcf(uint8_t data) {
 	i2c_slave_write(BUS_I2C, PCF_ADDRESS, NULL, &data, 1);
@@ -175,7 +177,7 @@ void pcf_task(void *pvParameters) {
 		vTaskDelay(pdMS_TO_TICKS(100));
 	}
 }
-
+*/
 // read 2 bytes from MPU-9250 on I2C bus
 uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
 
@@ -192,11 +194,8 @@ uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
 
 // check MPU-9250 sensor values
 void mpu_task(void *pvParameters) {
-
 	uint16_t threshold = 10000;
-
 	while (1) {
-
 		// turn off Wemos led
 		gpio_write(gpio_wemos_led, 1);
 		printf("Accel_z: %d \n", read_bytes_mpu(MPU9250_ACCEL_Z));
@@ -291,7 +290,6 @@ void loop_task(void* pvParametrs) {
 		/* Print Data */
 		#if 0 // Set to 1 to activate
 		//Serial.print(accX); Serial.print("\t");
-		/*
 		printf("%f",accY); printf("\t");
 		printf("%f",accZ); printf("\t");
 
@@ -299,9 +297,9 @@ void loop_task(void* pvParametrs) {
 		printf("%f",gyroY); printf("\t");
 		printf("%f",gyroZ); printf("\t");
 
-		printf("\t"); */
+		printf("\t");
 		#endif
-/*
+
 		printf("%f",roll); printf("\t");
 		printf("%f",A); printf("\t");
 		printf("%f",compXAngle); printf("\t");
@@ -312,7 +310,7 @@ void loop_task(void* pvParametrs) {
 		printf("%f",A); printf("\t");
 		printf("%f",compYAngle); printf("\t");
 		printf("%f",kalYAngle); printf("\t");
-*/
+
 		#if 0 // Set to 1 to print the temperature
 		Serial.print("\t");
 
