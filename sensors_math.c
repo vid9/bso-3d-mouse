@@ -1,7 +1,7 @@
-//#include <stdio.h>
+#include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
-//#include <sys/time.h>
+#include <sys/time.h>
 //#include <stdbool.h>
 //#include <stdint.h>
 //#include <string.h>
@@ -42,7 +42,6 @@ kalman *kalmanX, *kalmanY;
 double accX, accY, accZ;
 double gyroX, gyroY, gyroZ;
 
-double A;
 double gyroXAngle, gyroYAngle;
 double compXAngle, compYAngle;
 double kalXAngle, kalYAngle;
@@ -125,59 +124,7 @@ float kalman_get_angle(kalman * p_kalman, float newAngle, float newRate, float d
 void setAngle(kalman * p_kalman , float angle) {
 	p_kalman->angle=angle;
 }
-/*
-// write byte to PCF on I2C bus
-void write_byte_pcf(uint8_t data) {
-	i2c_slave_write(BUS_I2C, PCF_ADDRESS, NULL, &data, 1);
-}
 
-// read byte from PCF on I2C bus
-uint8_t read_byte_pcf() {
-	uint8_t data;
-	i2c_slave_read(BUS_I2C, PCF_ADDRESS, NULL, &data, 1);
-	return data;
-}
-
-// check for pressed buttons
-void pcf_task(void *pvParameters) {
-
-	uint8_t pcf_byte;
-
-	// turn off all leds
-	write_byte_pcf(leds_off);
-
-	while (1) {
-
-		pcf_byte = read_byte_pcf();
-
-		// button 1 is pressed
-		if ((pcf_byte & button1) == 0) {
-			// clear buttons states and toggle led 1
-			write_byte_pcf((pcf_byte ^ ~led1) | clr_btn);
-
-
-			// button 2 is pressed
-		} else if ((pcf_byte & button2) == 0) {
-			// clear buttons states and turn on led 2
-			write_byte_pcf((pcf_byte & led2) | clr_btn);
-
-
-			// button 3 is pressed
-		} else if ((pcf_byte & button3) == 0) {
-			// clear buttons states and turn off led 3
-			write_byte_pcf((pcf_byte | ~led3) | clr_btn);
-
-			// button 4 is pressed
-		} else if ((pcf_byte & button4) == 0) {
-			// blink led 4
-			write_byte_pcf(pcf_byte ^ ~led4);
-		}
-
-		// check again after 200 ms
-		vTaskDelay(pdMS_TO_TICKS(100));
-	}
-}
-*/
 // read 2 bytes from MPU-9250 on I2C bus
 uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
 
@@ -193,6 +140,7 @@ uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
 }
 
 // check MPU-9250 sensor values
+
 void mpu_task(void *pvParameters) {
 	uint16_t threshold = 10000;
 	while (1) {
@@ -243,89 +191,83 @@ void loop_task(void* pvParametrs) {
 		#ifdef RESTRICT_PITCH
 	// This fixes the transition problem when the accelerometer angle jumps between -180 and 180 degrees
 			if ((roll < -90 && kalXAngle > 90) || (roll > 90 && kalXAngle < -90)) {
-				//setAngle(kalman, roll);
-				setAngle(kalmanX, roll); 
+				setAngle(&kalmanX, roll); 
 				compXAngle = roll;
 				kalXAngle = roll;
 				gyroXAngle = roll;
 			} else
-				kalXAngle = kalman_get_angle(kalmanX, roll, gyroXRate, dt); // Calculate the angle using a Kalman filter  
-				//kalXAngle = kalman_get_angle(kalman, roll, gyroXRate, dt); // Calculate the angle using a Kalman filter 
+				kalXAngle = kalman_get_angle(&kalmanX, roll, gyroXRate, dt); // Calculate the angle using a Kalman filter  
 			if (abs(kalXAngle) > 90)
 				gyroYRate = -gyroYRate; // Invert rate, so it fits the restriced accelerometer reading
-			kalYAngle = kalman_get_angle(kalmanY, pitch, gyroYRate, dt); 
-			//kalYAngle = kalman_get_angle(kalman, pitch, gyroYRate, dt); 
+			kalYAngle = kalman_get_angle(&kalmanY, pitch, gyroYRate, dt); 
 		#else
 			// This fixes the transition problem when the accelerometer angle jumps between -180 and 180 degrees
 			if ((pitch < -90 && kalYAngle > 90) || (pitch > 90 && kalYAngle < -90)) {
-				//setAngle(kalman, pitch); 
-				setAngle(kalmanY, pitch); 
+				setAngle(&kalmanY, pitch); 
 				compYAngle = pitch;
 				kalYAngle = pitch;
-				A = pitch;
+				gyroYAngle = pitch;
 			} else
-				kalYAngle = kalman_get_angle(kalmanY, pitch, gyroYRate, dt); // Calculate the angle using a Kalman filter   
-				//kalYAngle = kalman_get_angle(kalman, pitch, gyroYRate, dt); // Calculate the angle using a Kalman filter   
+				kalYAngle = kalman_get_angle(&kalmanY, pitch, gyroYRate, dt); // Calculate the angle using a Kalman filter   
 
 			if (abs(kalYAngle) > 90)
 				gyroXRate = -gyroXRate; // Invert rate, so it fits the restriced accelerometer reading
-			kalXAngle = kalman_get_angle(kalmanX, roll, gyroXRate, dt); // Calculate the angle using a Kalman filter 
-			//kalXAngle = kalman_get_angle(kalman, roll, gyroXRate, dt); // Calculate the angle using a Kalman filter 
+			kalXAngle = kalman_get_angle(&kalmanX, roll, gyroXRate, dt); // Calculate the angle using a Kalman filter 
 		#endif
 
-		A += gyroXRate * dt; // Calculate gyro angle without any filter
+		gyroXAngle += gyroXRate * dt; // Calculate gyro angle without any filter
 		gyroYAngle += gyroYRate * dt;
-		//A += kalmanX.getRate() * dt; // Calculate gyro angle using the unbiased rate
-		//A += kalmanY.getRate() * dt;
+		//gyroXAngle += &kalmanX.getRate() * dt; // Calculate gyro angle using the unbiased rate
+		//gyroYAngle += &kalmanY.getRate() * dt;
 
 		compXAngle = 0.93 * (compXAngle + gyroXRate * dt) + 0.07 * roll; // Calculate the angle using a Complimentary filter
 		compYAngle = 0.93 * (compYAngle + gyroYRate * dt) + 0.07 * pitch;
 
 		// Reset the gyro angle when it has drifted too much
-		if (A < -180 || A > 180)
-			A = kalXAngle;
-		if (A < -180 || A > 180)
-			A = kalYAngle;
+		if (gyroXAngle < -180 || gyroXAngle > 180)
+			gyroXAngle = kalXAngle;
+		if (gyroYAngle < -180 || gyroYAngle > 180)
+			gyroYAngle = kalYAngle;
 
 		/* Print Data */
 		#if 0 // Set to 1 to activate
-		//Serial.print(accX); Serial.print("\t");
-		printf("%f",accY); printf("\t");
-		printf("%f",accZ); printf("\t");
+			//Serial.print(accX); Serial.print("\t");
+			printf("%f",accY); printf("\t");
+			printf("%f",accZ); printf("\t");
 
-		printf("%f",gyroX); printf("\t");
-		printf("%f",gyroY); printf("\t");
-		printf("%f",gyroZ); printf("\t");
+			printf("%f",gyroX); printf("\t");
+			printf("%f",gyroY); printf("\t");
+			printf("%f",gyroZ); printf("\t");
 
-		printf("\t");
+			printf("\t");
 		#endif
 
-		printf("%f",roll); printf("\t");
-		printf("%f",A); printf("\t");
-		printf("%f",compXAngle); printf("\t");
-		printf("%f",kalXAngle); printf("\t");
+		printf("%f",roll); printf("\n");
+		printf("%f",gyroXAngle); printf("\n");
+		printf("%f",compXAngle); printf("\n");
+		printf("%f",kalXAngle); printf("\n");
 
-		printf("\t");
-		printf("%f",pitch); printf("\t");
-		printf("%f",A); printf("\t");
-		printf("%f",compYAngle); printf("\t");
-		printf("%f",kalYAngle); printf("\t");
+		printf("\n");
+		printf("%f",pitch); printf("\n");
+		printf("%f",gyroYAngle); printf("\n");
+		printf("%f",compYAngle); printf("\n");
+		printf("%f",kalYAngle); printf("\n");
 
 		#if 0 // Set to 1 to print the temperature
-		Serial.print("\t");
+			Serial.print("\t");
 
-		//double temperature = (double)tempRaw / 340.0 + 36.53;
-		//Serial.print(temperature); Serial.print("\t");
+			//double temperature = (double)tempRaw / 340.0 + 36.53;
+			//Serial.print(temperature); Serial.print("\t");
 		#endif
 
 		printf("\r\n");
-		vTaskDelay(pdMS_TO_TICKS(2));
+		vTaskDelay(pdMS_TO_TICKS(100));
 	}
 }
 
 void user_init(void) {
 	uart_set_baud(0, 115200);
-	i2c_init(BUS_I2C, SCL, SDA, I2C_FREQ_100K);
+	i2c_init(BUS_I2C, SCL, SDA, I2C_FREQ_400K);
 	// fix i2c driver to work with MPU-9250
 	gpio_enable(SCL, GPIO_OUTPUT);
 
@@ -333,36 +275,15 @@ void user_init(void) {
 	gpio_enable(gpio_wemos_led, GPIO_OUTPUT);
 	gpio_write(gpio_wemos_led, 1);
 
-
-	// create pcf task
-	//xTaskCreate(pcf_task, "PCF task", 1000, NULL, 2, NULL);
-	//i2cData[0] = 7;
-	//i2cData[1] = 0x00;
-	//i2cData[2] = 0x00;
-	//i2cData[3] = 0x00;
-	//while (*i2cWrite(0x19, i2cData, 4, false)); // popravi naslove
-	//while (i2cWrite(0x3B, 0x01, true)); // popravi naslove
-	
-
-	//while (i2cRead(0x75, i2cData, 1));
-	/*
-	if (i2cData[0] != 0x68) { // Read "WHO_AM_I" register
-		printf("Error reading sensor");
-		while (1);
-	}
-	*/
 	vTaskDelay(pdMS_TO_TICKS(100)); // Wait for sensor to stabilize
-
 	/* Set kalman and gyro starting angle */
-	//while (i2cRead(0x3B, i2cData, 6));
 	accX = read_bytes_mpu(MPU9250_ACCEL_X);
 	accY = read_bytes_mpu(MPU9250_ACCEL_Y);
 	accZ = read_bytes_mpu(MPU9250_ACCEL_Z);
 
-	kalman_init(kalmanX);
-	kalman_init(kalmanY);
-
-		
+	kalman_init(&kalmanX);
+	kalman_init(&kalmanY);
+	
 	#ifdef RESTRICT_PITCH // Eq. 25 and 26
   		double roll  = atan2(accY, accZ) * RAD_TO_DEG;
   		double pitch = atan(-accX / sqrt(accY * accY + accZ * accZ)) * RAD_TO_DEG;
@@ -370,19 +291,17 @@ void user_init(void) {
   		double roll  = atan(accY / sqrt(accX * accX + accZ * accZ)) * RAD_TO_DEG;
   		double pitch = atan2(-accX, accZ) * RAD_TO_DEG;
 	#endif
-		
-	//setAngle(kalmanX, roll); 
-	setAngle(kalmanX, roll); // Set starting angle 
-	//setAngle(kalmanY, pitch); 
-	setAngle(kalmanY, pitch); 
-	A = roll;
-	A = pitch;
+	
+	setAngle(&kalmanX, roll); // Set starting angle 
+	setAngle(&kalmanY, pitch);
+	
+	gyroXAngle = roll;
+	gyroYAngle = pitch;
 	compXAngle = roll;
 	compYAngle = pitch;
-
+	
 	gettimeofday(&tval_before, NULL);
 
-	// create mpu task
-	//xTaskCreate(mpu_task, "MPU-9250 task", 1000, NULL, 2, NULL);
-	xTaskCreate(loop_task, "MPU-9250 task", 1000, NULL, 2, NULL);
+	// create loop task
+	xTaskCreate(loop_task, "MPU-9250 loop", 1000, NULL, 2, NULL);
 }
