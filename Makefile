@@ -1,6 +1,6 @@
-PROGRAM=sensors_math
+PROGRAM=mouse
 
-PROGRAM_SRC_FILES=./sensors_math.c
+PROGRAM_SRC_FILES=./mouse.c
 
 #EXTRA_COMPONENTS=extras/rboot-ota extras/i2c extras/mbedtls extras/httpd
 
