@@ -136,10 +136,6 @@ void mpu_task(void *pvParameters) {
 			}
 		}
 
-		int gyroscope_x = read_bytes_mpu(MPU9250_GYRO_X);
-		int gyroscope_y = read_bytes_mpu(MPU9250_GYRO_Y);
-		int gyroscope_z = read_bytes_mpu(MPU9250_GYRO_Z);
-
 		int smoothed_accelerometer_x = 0;
 		int smoothed_accelerometer_y= 0;
 		int smoothed_accelerometer_z = 0;
@@ -154,32 +150,21 @@ void mpu_task(void *pvParameters) {
 		smoothed_accelerometer_y = smoothed_accelerometer_y/20;
 		smoothed_accelerometer_z = smoothed_accelerometer_z/20;
 
-		gettimeofday(&tval_after, NULL);
-		
-		timersub(&tval_after, &tval_before, &tval_result);
-		
-		long dt = tval_result.tv_usec; // Calculate delta time
+		double dt = 100; // Calculate delta time
 
-		printf("delta time: %ld\n", dt);
+		printf("time: %d\n", xTaskGetTickCount() * portTICK_PERIOD_MS);
 
-		gettimeofday(&tval_before, NULL);
-
-		int velocity_x = (smoothed_accelerometer_x + previous_acceleration_x) / 2*dt;
-		int velocity_y = (smoothed_accelerometer_y + previous_acceleration_y) / 2*dt;
-		int velocity_z = (smoothed_accelerometer_z + previous_acceleration_z) / 2*dt;
-
-		// turn off Wemos led
-		gpio_write(gpio_wemos_led, 1);
-		printf("Accel_x: %d | raw: %d | velocity: %d \n", smoothed_accelerometer_x, accelometer_x, velocity_x);
-		printf("Accel_y: %d | raw: %d | velocity: %d \n", smoothed_accelerometer_y, accelometer_y, velocity_y);
-		printf("Accel_z: %d | raw: %d | velocity: %d \n", smoothed_accelerometer_z, accelometer_z, velocity_z); printf("\n");
-		//printf("Gyro_x: %d \n", gyroscope_x);
-		//printf("Gyro_y: %d \n", gyroscope_y);
-		//printf("Gyro_z: %d \n", gyroscope_z);
+		printf("Accel_x: %d | raw: %d | delta from previous: %d \n", smoothed_accelerometer_x, accelometer_x, smoothed_accelerometer_x - previous_acceleration_x);
+		printf("Accel_y: %d | raw: %d | delta from previous: %d \n", smoothed_accelerometer_y, accelometer_y, smoothed_accelerometer_y - previous_acceleration_y);
+		printf("Accel_z: %d | raw: %d | delta from previous: %d \n", smoothed_accelerometer_z, accelometer_z, smoothed_accelerometer_z - previous_acceleration_z); printf("\n");
 
 		previous_acceleration_x = smoothed_accelerometer_x;
 		previous_acceleration_y = smoothed_accelerometer_y;
 		previous_acceleration_z = smoothed_accelerometer_z;
+
+		int gyroscope_x = read_bytes_mpu(MPU9250_GYRO_X);
+		int gyroscope_y = read_bytes_mpu(MPU9250_GYRO_Y);
+		int gyroscope_z = read_bytes_mpu(MPU9250_GYRO_Z);
 
 		// check again after 100 ms
 		vTaskDelay(pdMS_TO_TICKS(100));
