@@ -189,7 +189,7 @@ void loop_task(void* pvParametrs) {
 		double gyroYRate = gyroY / 131.0; // Convert to deg/s
 
 		#ifdef RESTRICT_PITCH
-	// This fixes the transition problem when the accelerometer angle jumps between -180 and 180 degrees
+			// This fixes the transition problem when the accelerometer angle jumps between -180 and 180 degrees
 			if ((roll < -90 && kalXAngle > 90) || (roll > 90 && kalXAngle < -90)) {
 				setAngle(&kalmanX, roll); 
 				compXAngle = roll;
@@ -242,16 +242,16 @@ void loop_task(void* pvParametrs) {
 			printf("\t");
 		#endif
 
-		printf("%f",roll); printf("\n");
-		printf("%f",gyroXAngle); printf("\n");
-		printf("%f",compXAngle); printf("\n");
-		printf("%f",kalXAngle); printf("\n");
+		printf("Roll: %f\n",roll);
+		//printf("%f",gyroXAngle); printf("\n");
+		//printf("%f",compXAngle); printf("\n");
+		//printf("%f",kalXAngle); printf("\n");
 
-		printf("\n");
-		printf("%f",pitch); printf("\n");
-		printf("%f",gyroYAngle); printf("\n");
-		printf("%f",compYAngle); printf("\n");
-		printf("%f",kalYAngle); printf("\n");
+		//printf("\n");
+		printf("Pitch: %f\n",pitch); printf("\n");
+		//printf("%f",gyroYAngle); printf("\n");
+		//printf("%f",compYAngle); printf("\n");
+		//printf("%f",kalYAngle); printf("\n");
 
 		#if 0 // Set to 1 to print the temperature
 			Serial.print("\t");
