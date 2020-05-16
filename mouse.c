@@ -55,7 +55,7 @@ typedef enum {
 #define accelerometer_z_bias 500.0
 
 #define accelerometer_cache_size 20
-#define gyroscope_cache_size 5
+#define gyroscope_cache_size 1
 
 double accelerometer_x_values[accelerometer_cache_size];
 double accelerometer_y_values[accelerometer_cache_size];
