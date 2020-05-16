@@ -15,11 +15,22 @@
 
 const double RAD_TO_DEG = 57.29577951;
 
-#define PCF_ADDRESS	0x38
 #define MPU_ADDRESS	0x68
+#define MAG_ADDRESS 0x0C
 #define BUS_I2C		0
 #define SCL 14
 #define SDA 12
+
+#define I2C_SLV0_ADDR 0x25
+#define I2C_SLV0_REG 0x26
+#define I2C_SLV0_DO 0x63
+#define I2C_SLV0_CTRL 0x27
+#define I2C_SLV0_EN 0x80
+#define I2C_READ_FLAG 0x80
+#define AK8963_I2C_ADDR 0x0C
+#define AK8963_CNTL1 0x0A
+#define AK8963_PWR_DOWN 0x00
+#define AK8963_WHO_AM_I 0x00
 
 //					mask	returned value
 #define button1		0x20	// 0b ??0? ????
@@ -37,10 +48,14 @@ const double RAD_TO_DEG = 57.29577951;
 #define gpio_wemos_led	2
 #define RESTRICT_PITCH
 
-kalman *kalmanX, *kalmanY;
+#define DATA_READY_MASK 0x01
+#define MAGIC_OVERFLOW_MASK 0x8
+
+kalman kalmanX, kalmanY;
 
 double accX, accY, accZ;
 double gyroX, gyroY, gyroZ;
+double magX, magY, magZ;
 
 double gyroXAngle, gyroYAngle;
 double compXAngle, compYAngle;
@@ -53,7 +68,10 @@ typedef enum {
 	MPU9250_TEMP = 0x41,
 	MPU9250_GYRO_X = 0x43,
 	MPU9250_GYRO_Y = 0x45,
-	MPU9250_GYRO_Z = 0x47
+	MPU9250_GYRO_Z = 0x47,
+	MPU9250_MAG_X = 0x03,
+	MPU9250_MAG_Y = 0x05,
+	MPU9250_MAG_Z = 0x07
 } mpu9250_quantity;
 
 uint32_t timer;
@@ -62,68 +80,6 @@ const uint8_t IMUAddress = 0x68; // AD0 is logic low on the PCB
 const uint16_t I2C_TIMEOUT = 1000; // Used to check for errors in I2C communication
 
 struct timeval tval_before, tval_after, tval_result;
-
-void kalman_init(kalman * p_kalman) {
-
-    /* We will set the variables like so, these can also be tuned by the user */
-
-    p_kalman->Q_angle = 0.001f;
-    p_kalman->Q_bias = 0.003f;
-    p_kalman->R_measure = 0.03f;
-
-    p_kalman->angle = 0.0f; // Reset the angle
-    p_kalman->bias = 0.0f; // Reset bias
-
-    p_kalman->P[0][0] = 0.0f; // Since we assume that the bias is 0 and we know the starting angle (use setAngle), the error covariance matrix is set like so - see: http://en.wikipedia.org/wiki/Kalman_filter#Example_application.2C_technical
-    p_kalman->P[0][1] = 0.0f;
-    p_kalman->P[1][0] = 0.0f;
-    p_kalman->P[1][1] = 0.0f;
-}
-
-
-float kalman_get_angle(kalman * p_kalman, float newAngle, float newRate, float dt){
-    p_kalman->rate = newRate - p_kalman->bias;
-    p_kalman->angle += dt * p_kalman->rate;
-
-    // Update estimation error covariance - Project the error covariance ahead
-    
-    p_kalman->P[0][0] += dt * (dt*p_kalman->P[1][1] - p_kalman->P[0][1] - p_kalman->P[1][0] + p_kalman->Q_angle);
-    p_kalman->P[0][1] -= dt * p_kalman->P[1][1];
-    p_kalman->P[1][0] -= dt * p_kalman->P[1][1];
-    p_kalman->P[1][1] += p_kalman->Q_bias * dt;
-
-    // Discrete Kalman filter measurement update equations - Measurement Update ("Correct")
-    // Calculate Kalman gain - Compute the Kalman gain
-    
-    float S = p_kalman->P[0][0] + p_kalman->R_measure; // Estimate error
-    
-    float K[2]; // Kalman gain - This is a 2x1 vector
-    K[0] = p_kalman->P[0][0] / S;
-    K[1] = p_kalman->P[1][0] / S;
-
-    // Calculate angle and bias - Update estimate with measurement zk (newAngle)
-    
-    float y = newAngle - p_kalman->angle; // Angle difference
-    
-    p_kalman->angle += K[0] * y;
-    p_kalman->bias += K[1] * y;
-
-    // Calculate estimation error covariance - Update the error covariance
-    
-    float P00_temp = p_kalman->P[0][0];
-    float P01_temp = p_kalman->P[0][1];
-
-    p_kalman->P[0][0] -= K[0] * P00_temp;
-    p_kalman->P[0][1] -= K[0] * P01_temp;
-    p_kalman->P[1][0] -= K[1] * P00_temp;
-    p_kalman->P[1][1] -= K[1] * P01_temp;
-
-    return p_kalman->angle;
-}
-
-void setAngle(kalman * p_kalman , float angle) {
-	p_kalman->angle=angle;
-}
 
 // read 2 bytes from MPU-9250 on I2C bus
 uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
@@ -138,6 +94,26 @@ uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
 
 	return (data_high << 8) + data_low;
 }
+
+void read_AK8963( uint8_t subAddress, uint8_t count )
+{
+  	// set slave 0 to the AK8963 and set for read
+  	i2c_slave_write(BUS_I2C, I2C_SLV0_ADDR, NULL, AK8963_I2C_ADDR | I2C_READ_FLAG, 1);
+  	// set the register to the desired AK8963 sub address
+  	i2c_slave_write(BUS_I2C, I2C_SLV0_REG, NULL, &subAddress, 1);
+  	// enable I2C and request the bytes
+  	i2c_slave_write(BUS_I2C, I2C_SLV0_CTRL, NULL, I2C_SLV0_EN | count, 1);
+  	vTaskDelay(pdMS_TO_TICKS(1));
+}
+
+void write_AK8963 ( uint8_t subAddress, uint8_t dataAK8963 ) {
+  	i2c_slave_write(BUS_I2C, I2C_SLV0_ADDR, NULL, AK8963_I2C_ADDR, 1);
+  	i2c_slave_write(BUS_I2C, I2C_SLV0_REG, NULL, &subAddress, 1);
+  	i2c_slave_write(BUS_I2C, I2C_SLV0_DO, NULL, &dataAK8963, 1);
+	i2c_slave_write(BUS_I2C, I2C_SLV0_CTRL, NULL, I2C_SLV0_EN | (uint8_t)1, 1);
+  	vTaskDelay(pdMS_TO_TICKS(1));
+} 
+
 
 // check MPU-9250 sensor values
 
@@ -171,6 +147,9 @@ void loop_task(void* pvParametrs) {
 		gyroX = read_bytes_mpu(MPU9250_GYRO_X);
 		gyroY = read_bytes_mpu(MPU9250_GYRO_Y);
 		gyroZ = read_bytes_mpu(MPU9250_GYRO_Z);
+		magX = read_bytes_mpu(MPU9250_MAG_X);
+		magY = read_bytes_mpu(MPU9250_MAG_Y);
+		magZ = read_bytes_mpu(MPU9250_MAG_Z);
 
 		gettimeofday(&tval_after, NULL);
 		timersub(&tval_after, &tval_before, &tval_result);
@@ -241,18 +220,29 @@ void loop_task(void* pvParametrs) {
 
 			printf("\t");
 		#endif
-
 		printf("Roll: %f\n",roll);
-		//printf("%f",gyroXAngle); printf("\n");
-		//printf("%f",compXAngle); printf("\n");
-		//printf("%f",kalXAngle); printf("\n");
+		printf("Pitch: %f\n",pitch);
+		printf("Accel_z: %f ", accY);
+		printf("	Accel_x: %f ", accX);
+		printf("	Accel_y: %f\n",accY);
+		printf("Gyro_z: %f ", gyroZ);
+		printf("	Gyro_x: %f", gyroX);
+		printf("	Gyro_y: %f\n", gyroY);
+		printf("Mag_z: %f ", magZ);
+		printf("	Mag_x: %f", magX);
+		printf("	Mag_y: %f", magY);
+		/*
+		printf("Roll: %f\n",roll);
+		printf("%f",gyroXAngle); printf("\n");
+		printf("%f",compXAngle); printf("\n");
+		printf("%f",kalXAngle); printf("\n");
 
-		//printf("\n");
+		printf("\n");
 		printf("Pitch: %f\n",pitch); printf("\n");
-		//printf("%f",gyroYAngle); printf("\n");
-		//printf("%f",compYAngle); printf("\n");
-		//printf("%f",kalYAngle); printf("\n");
-
+		printf("%f",gyroYAngle); printf("\n");
+		printf("%f",compYAngle); printf("\n");
+		printf("%f",kalYAngle); printf("\n");
+		*/
 		#if 0 // Set to 1 to print the temperature
 			Serial.print("\t");
 
@@ -264,6 +254,7 @@ void loop_task(void* pvParametrs) {
 		vTaskDelay(pdMS_TO_TICKS(100));
 	}
 }
+
 
 void user_init(void) {
 	uart_set_baud(0, 115200);
@@ -280,6 +271,12 @@ void user_init(void) {
 	accX = read_bytes_mpu(MPU9250_ACCEL_X);
 	accY = read_bytes_mpu(MPU9250_ACCEL_Y);
 	accZ = read_bytes_mpu(MPU9250_ACCEL_Z);
+	gyroX = read_bytes_mpu(MPU9250_GYRO_X);
+	gyroY = read_bytes_mpu(MPU9250_GYRO_Y);
+	gyroZ = read_bytes_mpu(MPU9250_GYRO_Z);
+	magX = read_bytes_mpu(MPU9250_MAG_X);
+	magY = read_bytes_mpu(MPU9250_MAG_Y);
+	magZ = read_bytes_mpu(MPU9250_MAG_Z);
 
 	kalman_init(&kalmanX);
 	kalman_init(&kalmanY);
@@ -299,7 +296,13 @@ void user_init(void) {
 	gyroYAngle = pitch;
 	compXAngle = roll;
 	compYAngle = pitch;
-	
+
+	write_AK8963(AK8963_CNTL1, AK8963_PWR_DOWN);
+	vTaskDelay(pdMS_TO_TICKS(100));
+
+	read_AK8963(AK8963_WHO_AM_I, 1);
+	vTaskDelay(pdMS_TO_TICKS(500)); // giving the AK8963 lots of time to recover from reset
+
 	gettimeofday(&tval_before, NULL);
 
 	// create loop task
