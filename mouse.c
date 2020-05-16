@@ -141,6 +141,18 @@ void mpu_task(void *pvParameters) {
 		double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y) - accelerometer_y_bias) / accelerometer_scale;
 		double accelerometer_z = ((double) read_bytes_mpu(MPU9250_ACCEL_Z) - accelerometer_z_bias) / accelerometer_scale;
 
+		if (accelerometer_x > 16) {
+			accelerometer_x -= 32.76;
+		}
+
+		if (accelerometer_y > 16) {
+			accelerometer_y -= 32.76;
+		}
+
+		if (accelerometer_z > 16) {
+			accelerometer_z -= 32.76;
+		}
+
 		for (int i = 0; i < 20; i++) {
 			if (i == 19) {
 				accelerometer_x_values[i] = accelerometer_x;
@@ -263,6 +275,18 @@ void user_init(void) {
 	double accelerometer_x = ((double) read_bytes_mpu(MPU9250_ACCEL_X) - accelerometer_x_bias) / accelerometer_scale;
 	double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y) - accelerometer_y_bias) / accelerometer_scale;
 	double accelerometer_z = ((double) read_bytes_mpu(MPU9250_ACCEL_Z) - accelerometer_z_bias) / accelerometer_scale;
+
+	if (accelerometer_x > 16) {
+		accelerometer_x -= 32.76;
+	}
+
+	if (accelerometer_y > 16) {
+		accelerometer_y -= 32.76;
+	}
+
+	if (accelerometer_z > 16) {
+		accelerometer_z -= 32.76;
+	}
 
 	for (int i = 0; i < 20; i++) {
 		accelerometer_x_values[i] = accelerometer_x;
