@@ -94,19 +94,6 @@ void setAngle(kalman * p_kalman , float angle) {
 	p_kalman->angle=angle;
 }
 
-// read 2 bytes from MPU-9250 on I2C bus
-uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
-
-	// high and low byte of quantity
-	uint8_t data_high, data_low;
-	uint8_t register_address = (uint8_t) quantity;
-
-	i2c_slave_read(BUS_I2C, MPU_ADDRESS, &register_address, &data_high, 1);
-	register_address++;
-	i2c_slave_read(BUS_I2C, MPU_ADDRESS, &register_address, &data_low, 1);
-
-	return (data_high << 8) + data_low;
-}
 /*
 void kalman_init(kalman * p_kalman);
 float kalman_get_angle(kalman * p_kalman,float newAngle, float newRate, float dt);

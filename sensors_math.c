@@ -95,6 +95,20 @@ uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
 	return (data_high << 8) + data_low;
 }
 
+uint16_t read_bytes_mag(mpu9250_quantity quantity) {
+
+	// high and low byte of quantity
+	uint8_t data_high, data_low;
+	uint8_t register_address = (uint8_t) quantity;
+
+	i2c_slave_read(BUS_I2C, MAG_ADDRESS, &register_address, &data_high, 1);
+	register_address++;
+	i2c_slave_read(BUS_I2C, MAG_ADDRESS, &register_address, &data_low, 1);
+
+	return (data_high << 8) + data_low;
+}
+
+/*
 void read_AK8963( uint8_t subAddress, uint8_t count )
 {
   	// set slave 0 to the AK8963 and set for read
@@ -113,7 +127,7 @@ void write_AK8963 ( uint8_t subAddress, uint8_t dataAK8963 ) {
 	i2c_slave_write(BUS_I2C, I2C_SLV0_CTRL, NULL, I2C_SLV0_EN | (uint8_t)1, 1);
   	vTaskDelay(pdMS_TO_TICKS(1));
 } 
-
+*/
 
 // check MPU-9250 sensor values
 
@@ -147,9 +161,9 @@ void loop_task(void* pvParametrs) {
 		gyroX = read_bytes_mpu(MPU9250_GYRO_X);
 		gyroY = read_bytes_mpu(MPU9250_GYRO_Y);
 		gyroZ = read_bytes_mpu(MPU9250_GYRO_Z);
-		magX = read_bytes_mpu(MPU9250_MAG_X);
-		magY = read_bytes_mpu(MPU9250_MAG_Y);
-		magZ = read_bytes_mpu(MPU9250_MAG_Z);
+		magX = read_bytes_mag(MPU9250_MAG_X);
+		magY = read_bytes_mag(MPU9250_MAG_Y);
+		magZ = read_bytes_mag(MPU9250_MAG_Z);
 
 		gettimeofday(&tval_after, NULL);
 		timersub(&tval_after, &tval_before, &tval_result);
@@ -274,9 +288,9 @@ void user_init(void) {
 	gyroX = read_bytes_mpu(MPU9250_GYRO_X);
 	gyroY = read_bytes_mpu(MPU9250_GYRO_Y);
 	gyroZ = read_bytes_mpu(MPU9250_GYRO_Z);
-	magX = read_bytes_mpu(MPU9250_MAG_X);
-	magY = read_bytes_mpu(MPU9250_MAG_Y);
-	magZ = read_bytes_mpu(MPU9250_MAG_Z);
+	magX = read_bytes_mag(MPU9250_MAG_X);
+	magY = read_bytes_mag(MPU9250_MAG_Y);
+	magZ = read_bytes_mag(MPU9250_MAG_Z);
 
 	kalman_init(&kalmanX);
 	kalman_init(&kalmanY);
@@ -297,11 +311,11 @@ void user_init(void) {
 	compXAngle = roll;
 	compYAngle = pitch;
 
-	write_AK8963(AK8963_CNTL1, AK8963_PWR_DOWN);
-	vTaskDelay(pdMS_TO_TICKS(100));
+//	write_AK8963(AK8963_CNTL1, AK8963_PWR_DOWN);
+//	vTaskDelay(pdMS_TO_TICKS(100));
 
-	read_AK8963(AK8963_WHO_AM_I, 1);
-	vTaskDelay(pdMS_TO_TICKS(500)); // giving the AK8963 lots of time to recover from reset
+//	read_AK8963(AK8963_WHO_AM_I, 1);
+//	vTaskDelay(pdMS_TO_TICKS(500)); // giving the AK8963 lots of time to recover from reset
 
 	gettimeofday(&tval_before, NULL);
 
