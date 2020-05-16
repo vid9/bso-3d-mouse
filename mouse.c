@@ -10,6 +10,15 @@
 #define SCL 14
 #define SDA 12
 
+#define SMPLRT_DIV      0x19
+#define MPU_CONFIG      0x1A
+#define GYRO_CONFIG     0x1B
+#define ACCEL_CONFIG    0x1C
+#define ACCEL_CONFIG2   0x1D
+#define INT_PIN_CFG     0x37
+#define INT_ENABLE      0x38
+#define PWR_MGMT_1      0x6B
+
 //					mask	returned value
 #define button1		0x20	// 0b ??0? ????
 #define button2		0x10	// 0b ???0 ????
@@ -39,7 +48,11 @@ typedef enum {
 	MPU9250_GYRO_Z = 0x47
 } mpu9250_quantity;
 
-float accelerometer_scale = 16000.0;
+float accelerometer_scale = 2000.0;
+
+double accelerometer_x_bias = 0.0;
+double accelerometer_y_bias = 0.0;
+double accelerometer_z_bias = 500.0;
 
 double accelerometer_x_values[20];
 double accelerometer_y_values[20];
@@ -117,16 +130,16 @@ uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
 	return (data_high << 8) + data_low;
 }
 
-uint16_t write_bytes_mpu(uint8_t register_address, uint8_t data) {
+void write_bytes_mpu(uint8_t register_address, uint8_t data) {
 	i2c_slave_write(BUS_I2C, MPU_ADDRESS, &register_address, &data, 1);
 }
 
 // check MPU-9250 sensor values
 void mpu_task(void *pvParameters) {
 	while (1) {
-		double accelerometer_x = ((double) read_bytes_mpu(MPU9250_ACCEL_X)) / accelerometer_scale;
-		double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y)) / accelerometer_scale;
-		double accelerometer_z = ((double) read_bytes_mpu(MPU9250_ACCEL_Z) - 4000.0) / accelerometer_scale;
+		double accelerometer_x = ((double) read_bytes_mpu(MPU9250_ACCEL_X) - accelerometer_x_bias) / accelerometer_scale;
+		double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y) - accelerometer_y_bias) / accelerometer_scale;
+		double accelerometer_z = ((double) read_bytes_mpu(MPU9250_ACCEL_Z) - accelerometer_z_bias) / accelerometer_scale;
 
 		for (int i = 0; i < 20; i++) {
 			if (i == 19) {
@@ -206,6 +219,34 @@ void mpu_task(void *pvParameters) {
 	}
 }
 
+void init_mpu() {
+	write_bytes_mpu(PWR_MGMT_2, 0);
+
+    // bit0 1: Set LPF to 184Hz 0: No LPF, bit6 Stop if fifo full
+    write_bytes_mpu(MPU_CONFIG, (1<<6) | 1);
+
+    // Sample rate 1000Hz
+    write_bytes_mpu(SMPLRT_DIV, 0);
+
+    // Gyro 2000dps
+    write_bytes_mpu(GYRO_CONFIG, 3<<3);
+
+    // Accel full scale 16g
+    write_bytes_mpu(ACCEL_CONFIG, 3<<3);
+
+    // Set LPF to 218Hz BW
+    write_bytes_mpu(ACCEL_CONFIG2, 1);
+
+    uint8_t val;
+    // INT enable on RDY
+    write_bytes_mpu(INT_ENABLE, 1);
+
+    val = read_bytes_mpu(INT_PIN_CFG);
+    val |= 0x30;
+	
+    write_bytes_mpu(INT_PIN_CFG, val);
+}
+
 void user_init(void) {
 
 	uart_set_baud(0, 115200);
@@ -217,9 +258,11 @@ void user_init(void) {
 	gpio_enable(gpio_wemos_led, GPIO_OUTPUT);
 	gpio_write(gpio_wemos_led, 1);
 
-	double accelerometer_x = ((double) read_bytes_mpu(MPU9250_ACCEL_X)) / accelerometer_scale;
-	double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y)) / accelerometer_scale;
-	double accelerometer_z = ((double) read_bytes_mpu(MPU9250_ACCEL_Z) - 4000.0) / accelerometer_scale;
+	init_mpu();
+
+	double accelerometer_x = ((double) read_bytes_mpu(MPU9250_ACCEL_X) - accelerometer_x_bias) / accelerometer_scale;
+	double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y) - accelerometer_y_bias) / accelerometer_scale;
+	double accelerometer_z = ((double) read_bytes_mpu(MPU9250_ACCEL_Z) - accelerometer_z_bias) / accelerometer_scale;
 
 	for (int i = 0; i < 20; i++) {
 		accelerometer_x_values[i] = accelerometer_x;
