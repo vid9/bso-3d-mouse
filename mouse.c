@@ -57,7 +57,9 @@ int previous_gyroscope_x;
 int previous_gyroscope_y;
 int previous_gyroscope_z;
 
-struct timeval tval_before, tval_after, tval_result;
+bool button_1_pressed = 0;
+bool button_2_pressed = 0;
+bool button_3_pressed = 0;
 
 // write byte to PCF on I2C bus
 void write_byte_pcf(uint8_t data) {
@@ -75,39 +77,29 @@ uint8_t read_byte_pcf() {
 void pcf_task(void *pvParameters) {
 	uint8_t pcf_byte;
 
-	// turn off all leds
-	write_byte_pcf(leds_off);
-
 	while (1) {
 		pcf_byte = read_byte_pcf();
 
-		// button 1 is pressed
-		if ((pcf_byte & button1) == 0) {
-			// clear buttons states and toggle led 1
-			write_byte_pcf((pcf_byte ^ ~led1) | clr_btn);
-			// display temperature
-			//printf("Temperature: %.2f C\n", read_bmp280(BMP280_TEMPERATURE));
+		button_1_pressed = (pcf_byte & button1) == 0;
+		button_2_pressed = (pcf_byte & button2) == 0;
+		button_3_pressed = (pcf_byte & button3) == 0;
 
-			// button 2 is pressed
-		} else if ((pcf_byte & button2) == 0) {
-			// clear buttons states and turn on led 2
-			write_byte_pcf((pcf_byte & led2) | clr_btn);
-			// display pressure
-			//printf("Pressure: %.2f Pa\n", read_bmp280(BMP280_PRESSURE));
+		uint8_t lled = leds_off;
 
-			// button 3 is pressed
-		} else if ((pcf_byte & button3) == 0) {
-			// clear buttons states and turn off led 3
-			write_byte_pcf((pcf_byte | ~led3) | clr_btn);
+		if (button_1_pressed == 1) lled &= led1; 
+		else lled |= 0x08;
 
-			// button 4 is pressed
-		} else if ((pcf_byte & button4) == 0) {
-			// blink led 4
-			write_byte_pcf(pcf_byte ^ ~led4);
-		}
+		if (button_2_pressed == 1) lled &= led2; 
+		else lled |= 0x02;
+
+		if (button_3_pressed == 1) lled &= led3; 
+		else lled |= 0x04;
+		
+		
+		write_byte_pcf(lled);
 
 		// check again after 200 ms
-		vTaskDelay(pdMS_TO_TICKS(200));
+		vTaskDelay(pdMS_TO_TICKS(50));
 	}
 }
 
@@ -123,6 +115,10 @@ uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
 	i2c_slave_read(BUS_I2C, MPU_ADDRESS, &register_address, &data_low, 1);
 
 	return (data_high << 8) + data_low;
+}
+
+uint16_t write_bytes_mpu(uint8_t register_address, uint8_t data) {
+	i2c_slave_write(BUS_I2C, MPU_ADDRESS, &register_address, &data, 1);
 }
 
 // check MPU-9250 sensor values
@@ -157,12 +153,6 @@ void mpu_task(void *pvParameters) {
 		smoothed_accelerometer_x = smoothed_accelerometer_x/20;
 		smoothed_accelerometer_y = smoothed_accelerometer_y/20;
 		smoothed_accelerometer_z = smoothed_accelerometer_z/20;
-
-		double dt = 100; // Calculate delta time
-
-		printf("\n");
-
-		printf("time: %d\n", xTaskGetTickCount() * portTICK_PERIOD_MS);
 
 		printf("Accel_x: %f | raw: %f | delta from previous: %f \n", smoothed_accelerometer_x, accelerometer_x, smoothed_accelerometer_x - previous_accelerometer_x);
 		printf("Accel_y: %f | raw: %f | delta from previous: %f \n", smoothed_accelerometer_y, accelerometer_y, smoothed_accelerometer_y - previous_accelerometer_y);
@@ -260,6 +250,6 @@ void user_init(void) {
 	xTaskCreate(pcf_task, "PCF task", 1000, NULL, 2, NULL);
 
 	// create mpu task
-	xTaskCreate(mpu_task, "MPU-9250 task", 1000, NULL, 2, NULL);
+	xTaskCreate(mpu_task, "MPU-9250 task", 1000, NULL, 1, NULL);
 }
 
