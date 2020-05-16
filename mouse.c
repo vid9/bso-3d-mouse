@@ -19,6 +19,8 @@
 #define INT_PIN_CFG     0x37
 #define INT_ENABLE      0x38
 #define PWR_MGMT      	0x6C
+#define USER_CTRL_AD 	0x6A
+#define CNTL1_AD 		0x0A 
 
 //					mask	returned value
 #define button1		0x20	// 0b ??0? ????
@@ -131,15 +133,15 @@ void pcf_task(void *pvParameters) {
 	}
 }
 // read 2 bytes from MAGNETOMETER on I2C bus
-uint16_t read_bytes_mag(mpu9250_quantity quantity, int address) {
+uint16_t read_bytes_mag(mpu9250_quantity quantity) {
 
 	// high and low byte of quantity
 	uint8_t data_high, data_low;
 	uint8_t register_address = (uint8_t) quantity;
 
-	i2c_slave_read(BUS_I2C, address, &register_address, &data_high, 1);
+	i2c_slave_read(BUS_I2C, MAG_ADDRESS, &register_address, &data_high, 1);
 	register_address++;
-	i2c_slave_read(BUS_I2C, address, &register_address, &data_low, 1);
+	i2c_slave_read(BUS_I2C, MAG_ADDRESS, &register_address, &data_low, 1);
 
 	return (data_high << 8) + data_low;
 }
@@ -268,9 +270,9 @@ void mpu_task(void *pvParameters) {
 		previous_gyroscope_y = smoothed_gyroscope_y;
 		previous_gyroscope_z = smoothed_gyroscope_z;
 
-		double magnetometer_x = read_bytes_mag(MPU9250_MAG_X, MAG_ADDRESS);
-		double magnetometer_y = read_bytes_mag(MPU9250_MAG_Y, MAG_ADDRESS);
-		double magnetometer_z = read_bytes_mag(MPU9250_MAG_Z, MAG_ADDRESS);
+		double magnetometer_x = read_bytes_mag(MPU9250_MAG_X);
+		double magnetometer_y = read_bytes_mag(MPU9250_MAG_Y);
+		double magnetometer_z = read_bytes_mag(MPU9250_MAG_Z);
 
 		for (int i = 0; i < magnetometer_cache_size; i++) {
 			if (i == (magnetometer_cache_size - 1)) {
@@ -313,6 +315,7 @@ void mpu_task(void *pvParameters) {
 }
 
 void init_mpu() {
+
 	write_bytes_mpu(PWR_MGMT, 0);
 
     // bit0 1: Set LPF to 184Hz 0: No LPF, bit6 Stop if fifo full
@@ -330,8 +333,17 @@ void init_mpu() {
     // Set LPF to 218Hz BW
     write_bytes_mpu(ACCEL_CONFIG2, 1);
 
+    write_bytes_mpu(USER_CTRL_AD, 1);
+
+	write_bytes_mpu(INT_PIN_CFG, 1); //0000 0010 in binary, turn on the bypass multiplexer
+	
+	write_bytes_mpu(CNTL1_AD, 1);
+
+	vTaskDelay(pdMS_TO_TICKS(100));
+
     uint8_t val;
     // INT enable on RDY
+
     write_bytes_mpu(INT_ENABLE, 1);
 
     val = read_bytes_mpu(INT_PIN_CFG);
@@ -407,9 +419,9 @@ void user_init(void) {
 	previous_gyroscope_z = gyroscope_z;
 
 
-	double magnetometer_x = read_bytes_mag(MPU9250_MAG_X, MAG_ADDRESS);
-	double magnetometer_y = read_bytes_mag(MPU9250_MAG_Y, MAG_ADDRESS);
-	double magnetometer_z = read_bytes_mag(MPU9250_MAG_Z, MAG_ADDRESS);
+	double magnetometer_x = read_bytes_mag(MPU9250_MAG_X);
+	double magnetometer_y = read_bytes_mag(MPU9250_MAG_Y);
+	double magnetometer_z = read_bytes_mag(MPU9250_MAG_Z);
 
 	for (int i = 0; i < magnetometer_cache_size; i++) {
 		if (i == (magnetometer_cache_size - 1)) {
