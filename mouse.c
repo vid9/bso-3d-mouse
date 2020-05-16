@@ -39,13 +39,15 @@ typedef enum {
 	MPU9250_GYRO_Z = 0x47
 } mpu9250_quantity;
 
-int accelerometer_x_values[20];
-int accelerometer_y_values[20];
-int accelerometer_z_values[20];
+float accelerometer_scale = 16000.0;
 
-int previous_accelerometer_x;
-int previous_accelerometer_y;
-int previous_accelerometer_z;
+double accelerometer_x_values[20];
+double accelerometer_y_values[20];
+double accelerometer_z_values[20];
+
+double previous_accelerometer_x;
+double previous_accelerometer_y;
+double previous_accelerometer_z;
 
 int gyroscope_x_values[20];
 int gyroscope_y_values[20];
@@ -126,9 +128,9 @@ uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
 // check MPU-9250 sensor values
 void mpu_task(void *pvParameters) {
 	while (1) {
-		int accelerometer_x = read_bytes_mpu(MPU9250_ACCEL_X);
-		int accelerometer_y = read_bytes_mpu(MPU9250_ACCEL_Y);
-		int accelerometer_z = read_bytes_mpu(MPU9250_ACCEL_Z);
+		double accelerometer_x = ((double) read_bytes_mpu(MPU9250_ACCEL_X)) / accelerometer_scale;
+		double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y)) / accelerometer_scale;
+		double accelerometer_z = ((double) read_bytes_mpu(MPU9250_ACCEL_Z) - 4000.0) / accelerometer_scale;
 
 		for (int i = 0; i < 20; i++) {
 			if (i == 19) {
@@ -142,9 +144,9 @@ void mpu_task(void *pvParameters) {
 			}
 		}
 
-		int smoothed_accelerometer_x = 0;
-		int smoothed_accelerometer_y= 0;
-		int smoothed_accelerometer_z = 0;
+		double smoothed_accelerometer_x = 0;
+		double smoothed_accelerometer_y= 0;
+		double smoothed_accelerometer_z = 0;
 
 		for (int i = 0; i < 20; i++) {
 			smoothed_accelerometer_x += accelerometer_x_values[i];
@@ -162,9 +164,9 @@ void mpu_task(void *pvParameters) {
 
 		printf("time: %d\n", xTaskGetTickCount() * portTICK_PERIOD_MS);
 
-		printf("Accel_x: %d | raw: %d | delta from previous: %d \n", smoothed_accelerometer_x, accelerometer_x, smoothed_accelerometer_x - previous_accelerometer_x);
-		printf("Accel_y: %d | raw: %d | delta from previous: %d \n", smoothed_accelerometer_y, accelerometer_y, smoothed_accelerometer_y - previous_accelerometer_y);
-		printf("Accel_z: %d | raw: %d | delta from previous: %d \n", smoothed_accelerometer_z, accelerometer_z, smoothed_accelerometer_z - previous_accelerometer_z); printf("\n");
+		printf("Accel_x: %f | raw: %f | delta from previous: %f \n", smoothed_accelerometer_x, accelerometer_x, smoothed_accelerometer_x - previous_accelerometer_x);
+		printf("Accel_y: %f | raw: %f | delta from previous: %f \n", smoothed_accelerometer_y, accelerometer_y, smoothed_accelerometer_y - previous_accelerometer_y);
+		printf("Accel_z: %f | raw: %f | delta from previous: %f \n", smoothed_accelerometer_z, accelerometer_z, smoothed_accelerometer_z - previous_accelerometer_z); printf("\n");
 
 		previous_accelerometer_x = smoothed_accelerometer_x;
 		previous_accelerometer_y = smoothed_accelerometer_y;
@@ -225,9 +227,9 @@ void user_init(void) {
 	gpio_enable(gpio_wemos_led, GPIO_OUTPUT);
 	gpio_write(gpio_wemos_led, 1);
 
-	int accelerometer_x = read_bytes_mpu(MPU9250_ACCEL_X);
-	int accelerometer_y = read_bytes_mpu(MPU9250_ACCEL_Y);
-	int accelerometer_z = read_bytes_mpu(MPU9250_ACCEL_Z);
+	double accelerometer_x = ((double) read_bytes_mpu(MPU9250_ACCEL_X)) / accelerometer_scale;
+	double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y)) / accelerometer_scale;
+	double accelerometer_z = ((double) read_bytes_mpu(MPU9250_ACCEL_Z) - 4000.0) / accelerometer_scale;
 
 	for (int i = 0; i < 20; i++) {
 		accelerometer_x_values[i] = accelerometer_x;
