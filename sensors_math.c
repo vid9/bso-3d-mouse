@@ -108,27 +108,6 @@ uint16_t read_bytes_mag(mpu9250_quantity quantity) {
 	return (data_high << 8) + data_low;
 }
 
-/*
-void read_AK8963( uint8_t subAddress, uint8_t count )
-{
-  	// set slave 0 to the AK8963 and set for read
-  	i2c_slave_write(BUS_I2C, I2C_SLV0_ADDR, NULL, AK8963_I2C_ADDR | I2C_READ_FLAG, 1);
-  	// set the register to the desired AK8963 sub address
-  	i2c_slave_write(BUS_I2C, I2C_SLV0_REG, NULL, &subAddress, 1);
-  	// enable I2C and request the bytes
-  	i2c_slave_write(BUS_I2C, I2C_SLV0_CTRL, NULL, I2C_SLV0_EN | count, 1);
-  	vTaskDelay(pdMS_TO_TICKS(1));
-}
-
-void write_AK8963 ( uint8_t subAddress, uint8_t dataAK8963 ) {
-  	i2c_slave_write(BUS_I2C, I2C_SLV0_ADDR, NULL, AK8963_I2C_ADDR, 1);
-  	i2c_slave_write(BUS_I2C, I2C_SLV0_REG, NULL, &subAddress, 1);
-  	i2c_slave_write(BUS_I2C, I2C_SLV0_DO, NULL, &dataAK8963, 1);
-	i2c_slave_write(BUS_I2C, I2C_SLV0_CTRL, NULL, I2C_SLV0_EN | (uint8_t)1, 1);
-  	vTaskDelay(pdMS_TO_TICKS(1));
-} 
-*/
-
 // check MPU-9250 sensor values
 
 void mpu_task(void *pvParameters) {
