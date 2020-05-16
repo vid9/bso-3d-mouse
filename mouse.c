@@ -54,19 +54,20 @@ typedef enum {
 #define accelerometer_y_bias 0.0
 #define accelerometer_z_bias 500.0
 
-#define cache_size 20
+#define accelerometer_cache_size 20
+#define gyroscope_cache_size 5
 
-double accelerometer_x_values[cache_size];
-double accelerometer_y_values[cache_size];
-double accelerometer_z_values[cache_size];
+double accelerometer_x_values[accelerometer_cache_size];
+double accelerometer_y_values[accelerometer_cache_size];
+double accelerometer_z_values[accelerometer_cache_size];
 
 double previous_accelerometer_x;
 double previous_accelerometer_y;
 double previous_accelerometer_z;
 
-int gyroscope_x_values[cache_size];
-int gyroscope_y_values[cache_size];
-int gyroscope_z_values[cache_size];
+int gyroscope_x_values[gyroscope_cache_size];
+int gyroscope_y_values[gyroscope_cache_size];
+int gyroscope_z_values[gyroscope_cache_size];
 
 int previous_gyroscope_x;
 int previous_gyroscope_y;
@@ -154,8 +155,8 @@ void mpu_task(void *pvParameters) {
 			accelerometer_z -= 32.76;
 		}
 
-		for (int i = 0; i < cache_size; i++) {
-			if (i == (cache_size - 1)) {
+		for (int i = 0; i < accelerometer_cache_size; i++) {
+			if (i == (accelerometer_cache_size - 1)) {
 				accelerometer_x_values[i] = accelerometer_x;
 				accelerometer_y_values[i] = accelerometer_y;
 				accelerometer_z_values[i] = accelerometer_z;
@@ -170,31 +171,42 @@ void mpu_task(void *pvParameters) {
 		double smoothed_accelerometer_y= 0;
 		double smoothed_accelerometer_z = 0;
 
-		for (int i = 0; i < cache_size; i++) {
+		for (int i = 0; i < accelerometer_cache_size; i++) {
 			smoothed_accelerometer_x += accelerometer_x_values[i];
 			smoothed_accelerometer_y += accelerometer_y_values[i];
 			smoothed_accelerometer_z += accelerometer_z_values[i];
 		}
 
-		smoothed_accelerometer_x = smoothed_accelerometer_x/cache_size;
-		smoothed_accelerometer_y = smoothed_accelerometer_y/cache_size;
-		smoothed_accelerometer_z = smoothed_accelerometer_z/cache_size;
+		smoothed_accelerometer_x = smoothed_accelerometer_x/accelerometer_cache_size;
+		smoothed_accelerometer_y = smoothed_accelerometer_y/accelerometer_cache_size;
+		smoothed_accelerometer_z = smoothed_accelerometer_z/accelerometer_cache_size;
 
-		printf("Accel_x: %f | raw: %f | delta from previous: %f\n", smoothed_accelerometer_x, accelerometer_x, smoothed_accelerometer_x - previous_accelerometer_x);
-		printf("Accel_y: %f | raw: %f | delta from previous: %f\n", smoothed_accelerometer_y, accelerometer_y, smoothed_accelerometer_y - previous_accelerometer_y);
-		printf("Accel_z: %f | raw: %f | delta from previous: %f\n", smoothed_accelerometer_z, accelerometer_z, smoothed_accelerometer_z - previous_accelerometer_z); printf("\n");
+		//printf("Accel_x: %f | raw: %f | delta from previous: %f\n", smoothed_accelerometer_x, accelerometer_x, smoothed_accelerometer_x - previous_accelerometer_x);
+		//printf("Accel_y: %f | raw: %f | delta from previous: %f\n", smoothed_accelerometer_y, accelerometer_y, smoothed_accelerometer_y - previous_accelerometer_y);
+		//printf("Accel_z: %f | raw: %f | delta from previous: %f\n", smoothed_accelerometer_z, accelerometer_z, smoothed_accelerometer_z - previous_accelerometer_z); printf("\n");
 
 		previous_accelerometer_x = smoothed_accelerometer_x;
 		previous_accelerometer_y = smoothed_accelerometer_y;
 		previous_accelerometer_z = smoothed_accelerometer_z;
 
-
 		int gyroscope_x = read_bytes_mpu(MPU9250_GYRO_X);
 		int gyroscope_y = read_bytes_mpu(MPU9250_GYRO_Y);
 		int gyroscope_z = read_bytes_mpu(MPU9250_GYRO_Z);
 
-		for (int i = 0; i < cache_size; i++) {
-			if (i == (cache_size - 1)) {
+		if (gyroscope_x > 32768) {
+			gyroscope_x -= 65536;
+		}
+
+		if (gyroscope_y > 32768) {
+			gyroscope_y -= 65536;
+		}
+
+		if (gyroscope_z > 32768) {
+			gyroscope_z -= 65536;
+		}
+
+		for (int i = 0; i < gyroscope_cache_size; i++) {
+			if (i == (gyroscope_cache_size - 1)) {
 				gyroscope_x_values[i] = gyroscope_x;
 				gyroscope_y_values[i] = gyroscope_y;
 				gyroscope_z_values[i] = gyroscope_z;
@@ -209,15 +221,15 @@ void mpu_task(void *pvParameters) {
 		int smoothed_gyroscope_y= 0;
 		int smoothed_gyroscope_z = 0;
 
-		for (int i = 0; i < cache_size; i++) {
+		for (int i = 0; i < gyroscope_cache_size; i++) {
 			smoothed_gyroscope_x += gyroscope_x_values[i];
 			smoothed_gyroscope_y += gyroscope_y_values[i];
 			smoothed_gyroscope_z += gyroscope_z_values[i];
 		}
 
-		smoothed_gyroscope_x = smoothed_gyroscope_x/cache_size;
-		smoothed_gyroscope_y = smoothed_gyroscope_y/cache_size;
-		smoothed_gyroscope_z = smoothed_gyroscope_z/cache_size;
+		smoothed_gyroscope_x = smoothed_gyroscope_x/gyroscope_cache_size;
+		smoothed_gyroscope_y = smoothed_gyroscope_y/gyroscope_cache_size;
+		smoothed_gyroscope_z = smoothed_gyroscope_z/gyroscope_cache_size;
 
 		printf("Gyro_x: %d | raw: %d | delta from previous: %d\n", smoothed_gyroscope_x, gyroscope_x, smoothed_gyroscope_x - previous_gyroscope_x);
 		printf("Gyro_y: %d | raw: %d | delta from previous: %d\n", smoothed_gyroscope_y, gyroscope_y, smoothed_gyroscope_y - previous_gyroscope_y);
@@ -290,7 +302,7 @@ void user_init(void) {
 		accelerometer_z -= 32.76;
 	}
 
-	for (int i = 0; i < cache_size; i++) {
+	for (int i = 0; i < accelerometer_cache_size; i++) {
 		accelerometer_x_values[i] = accelerometer_x;
 		accelerometer_y_values[i] = accelerometer_y;
 		accelerometer_z_values[i] = accelerometer_z;
@@ -305,7 +317,19 @@ void user_init(void) {
 	int gyroscope_y = read_bytes_mpu(MPU9250_GYRO_Y);
 	int gyroscope_z = read_bytes_mpu(MPU9250_GYRO_Z);
 
-	for (int i = 0; i < cache_size; i++) {
+	if (gyroscope_x > 32768) {
+		gyroscope_x -= 65536;
+	}
+
+	if (gyroscope_y > 32768) {
+		gyroscope_y -= 65536;
+	}
+
+	if (gyroscope_z > 32768) {
+		gyroscope_z -= 65536;
+	}
+
+	for (int i = 0; i < gyroscope_cache_size; i++) {
 		gyroscope_x_values[i] = gyroscope_x;
 		gyroscope_y_values[i] = gyroscope_y;
 		gyroscope_z_values[i] = gyroscope_z;
