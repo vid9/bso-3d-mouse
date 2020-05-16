@@ -3,6 +3,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "i2c/i2c.h"
+#include "math.h"
 
 #define PCF_ADDRESS	0x38
 #define MPU_ADDRESS	0x68
@@ -11,16 +12,18 @@
 #define SCL 14
 #define SDA 12
 
-#define SMPLRT_DIV      0x19
-#define MPU_CONFIG      0x1A
-#define GYRO_CONFIG     0x1B
-#define ACCEL_CONFIG    0x1C
-#define ACCEL_CONFIG2   0x1D
-#define INT_PIN_CFG     0x37
-#define INT_ENABLE      0x38
-#define PWR_MGMT      	0x6C
-#define USER_CTRL_AD 	0x6A
-#define CNTL1_AD 		0x0A 
+#define SMPLRT_DIV      	0x19
+#define MPU_CONFIG      	0x1A
+#define GYRO_CONFIG     	0x1B
+#define ACCEL_CONFIG    	0x1C
+#define ACCEL_CONFIG2   	0x1D
+#define INT_PIN_CFG     	0x37
+#define INT_ENABLE      	0x38
+#define DATA_READY_MASK 	0x01
+#define MAGIC_OVERFLOW_MASK 0x8
+#define PWR_MGMT      		0x6C
+#define USER_CTRL_AD 		0x6A
+#define CNTL1_AD 			0x0A 
 
 //					mask	returned value
 #define button1		0x20	// 0b ??0? ????
@@ -36,10 +39,6 @@
 #define leds_off	0xff
 
 #define gpio_wemos_led	2
-
-typedef enum {
-	BMP280_TEMPERATURE, BMP280_PRESSURE
-} bmp280_quantity;
 
 typedef enum {
 	MPU9250_ACCEL_X = 0x3b,
@@ -60,9 +59,17 @@ typedef enum {
 #define accelerometer_y_bias 0.0
 #define accelerometer_z_bias 500.0
 
+#define gyroscope_x_bias 0.0
+#define gyroscope_y_bias 0.0
+#define gyroscope_z_bias 0.0
+
+#define gyroscope_rotation_threshold 0.005
+#define gyroscope_scale 16384.0
+
 #define accelerometer_cache_size 20
 #define gyroscope_cache_size 5
 #define magnetometer_cache_size 2
+
 
 double accelerometer_x_values[accelerometer_cache_size];
 double accelerometer_y_values[accelerometer_cache_size];
@@ -72,13 +79,17 @@ double previous_accelerometer_x;
 double previous_accelerometer_y;
 double previous_accelerometer_z;
 
-int gyroscope_x_values[gyroscope_cache_size];
-int gyroscope_y_values[gyroscope_cache_size];
-int gyroscope_z_values[gyroscope_cache_size];
+double gyroscope_x_values[gyroscope_cache_size];
+double gyroscope_y_values[gyroscope_cache_size];
+double gyroscope_z_values[gyroscope_cache_size];
 
-int previous_gyroscope_x;
-int previous_gyroscope_y;
-int previous_gyroscope_z;
+double previous_gyroscope_x;
+double previous_gyroscope_y;
+double previous_gyroscope_z;
+
+double pitch_gyroscope = 0;
+double roll_gyroscope = 0;
+double yaw_gyroscope = 0;
 
 double magnetometer_x_values[magnetometer_cache_size];
 double magnetometer_y_values[magnetometer_cache_size];
@@ -91,6 +102,8 @@ double previous_magnetometer_z;
 bool button_1_pressed = 0;
 bool button_2_pressed = 0;
 bool button_3_pressed = 0;
+
+int time_since_boot = 0;
 
 // write byte to PCF on I2C bus
 void write_byte_pcf(uint8_t data) {
@@ -117,14 +130,23 @@ void pcf_task(void *pvParameters) {
 
 		uint8_t lled = leds_off;
 
-		if (button_1_pressed == 1) lled &= led1; 
-		else lled |= 0x08;
+		if (button_1_pressed == 1) {
+			lled &= led1; 
+		} else {
+			lled |= 0x08;
+		}
 
-		if (button_2_pressed == 1) lled &= led2; 
-		else lled |= 0x02;
+		if (button_2_pressed == 1) {
+			lled &= led2; 
+		} else {
+			lled |= 0x02;
+		}
 
-		if (button_3_pressed == 1) lled &= led3; 
-		else lled |= 0x04;
+		if (button_3_pressed == 1) {
+			lled &= led3;
+		} else {
+			lled |= 0x04;
+		}
 		
 		
 		write_byte_pcf(lled);
@@ -132,6 +154,7 @@ void pcf_task(void *pvParameters) {
 		vTaskDelay(pdMS_TO_TICKS(50));
 	}
 }
+
 // read 2 bytes from MAGNETOMETER on I2C bus
 uint16_t read_bytes_mag(mpu9250_quantity quantity) {
 
@@ -164,10 +187,16 @@ void write_bytes_mpu(uint8_t register_address, uint8_t data) {
 	i2c_slave_write(BUS_I2C, MPU_ADDRESS, &register_address, &data, 1);
 }
 
+void write_bytes_mag(uint8_t register_address, uint8_t data) {
+	i2c_slave_write(BUS_I2C, MAG_ADDRESS, &register_address, &data, 1);
+}
+
 // check MPU-9250 sensor values
 void mpu_task(void *pvParameters) {
 	while (1) {
 		
+		int time = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
 		double accelerometer_x = ((double) read_bytes_mpu(MPU9250_ACCEL_X) - accelerometer_x_bias) / accelerometer_scale;
 		double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y) - accelerometer_y_bias) / accelerometer_scale;
 		double accelerometer_z = ((double) read_bytes_mpu(MPU9250_ACCEL_Z) - accelerometer_z_bias) / accelerometer_scale;
@@ -214,13 +243,24 @@ void mpu_task(void *pvParameters) {
 		//printf("Accel_y: %f | raw: %f | delta from previous: %f\n", smoothed_accelerometer_y, accelerometer_y, smoothed_accelerometer_y - previous_accelerometer_y);
 		//printf("Accel_z: %f | raw: %f | delta from previous: %f\n", smoothed_accelerometer_z, accelerometer_z, smoothed_accelerometer_z - previous_accelerometer_z); printf("\n");
 
+		double roll_accelerometer = 0.0;
+
+		// roll surges when the pitch is at 90 percent, this is a hack to fix that issue
+		if (fabs(smoothed_accelerometer_y) < 0.1 && fabs(smoothed_accelerometer_z) < 0.1) {
+			roll_accelerometer = 0.0;
+		} else {
+			roll_accelerometer = atan2(smoothed_accelerometer_y, smoothed_accelerometer_z) * 180/M_PI;
+		}
+
+		double pitch_accelerometer = atan2(-smoothed_accelerometer_x, sqrt(smoothed_accelerometer_y*smoothed_accelerometer_y + smoothed_accelerometer_z*smoothed_accelerometer_z)) * 180/M_PI;
+
 		previous_accelerometer_x = smoothed_accelerometer_x;
 		previous_accelerometer_y = smoothed_accelerometer_y;
 		previous_accelerometer_z = smoothed_accelerometer_z;
 
-		int gyroscope_x = read_bytes_mpu(MPU9250_GYRO_X);
-		int gyroscope_y = read_bytes_mpu(MPU9250_GYRO_Y);
-		int gyroscope_z = read_bytes_mpu(MPU9250_GYRO_Z);
+		double gyroscope_x = (double) read_bytes_mpu(MPU9250_GYRO_X);
+		double gyroscope_y = (double) read_bytes_mpu(MPU9250_GYRO_Y);
+		double gyroscope_z = (double) read_bytes_mpu(MPU9250_GYRO_Z);
 
 		if (gyroscope_x > 32768) {
 			gyroscope_x -= 65536;
@@ -246,9 +286,9 @@ void mpu_task(void *pvParameters) {
 			}
 		}
 
-		int smoothed_gyroscope_x = 0;
-		int smoothed_gyroscope_y= 0;
-		int smoothed_gyroscope_z = 0;
+		double smoothed_gyroscope_x = 0;
+		double smoothed_gyroscope_y = 0;
+		double smoothed_gyroscope_z = 0;
 
 		for (int i = 0; i < gyroscope_cache_size; i++) {
 			smoothed_gyroscope_x += gyroscope_x_values[i];
@@ -265,6 +305,27 @@ void mpu_task(void *pvParameters) {
 		//printf("Gyro_z: %d | raw: %d | delta from previous: %d\n", smoothed_gyroscope_z, gyroscope_z, smoothed_gyroscope_z - previous_gyroscope_z);
 		
 		printf("\n");
+		int dt = time - time_since_boot;
+
+		//printf("delta: %f\n", ((smoothed_gyroscope_x*dt)/gyroscope_scale) - (previous_gyroscope_x*dt)/gyroscope_scale);
+		//printf("delta: %f\n", ((smoothed_gyroscope_y*dt)/gyroscope_scale) - (previous_gyroscope_y*dt)/gyroscope_scale);
+		//printf("delta: %f\n", ((smoothed_gyroscope_z*dt)/gyroscope_scale) - (previous_gyroscope_z*dt)/gyroscope_scale);
+
+		double gyroscope_x_change = (smoothed_gyroscope_x*dt)/gyroscope_scale;
+		double gyroscope_y_change = (smoothed_gyroscope_y*dt)/gyroscope_scale;
+		double gyroscope_z_change = (smoothed_gyroscope_z*dt)/gyroscope_scale;
+
+		if (fabs(gyroscope_x_change) > gyroscope_rotation_threshold) {
+			roll_gyroscope += gyroscope_x_change;
+		}
+
+		if (fabs(gyroscope_y_change) > gyroscope_rotation_threshold) {
+			pitch_gyroscope += gyroscope_y_change;
+		}
+
+		if (fabs(gyroscope_z_change) > gyroscope_rotation_threshold) {
+			yaw_gyroscope -= gyroscope_z_change;
+		}
 
 		previous_gyroscope_x = smoothed_gyroscope_x;
 		previous_gyroscope_y = smoothed_gyroscope_y;
@@ -311,6 +372,18 @@ void mpu_task(void *pvParameters) {
 		previous_magnetometer_z = smoothed_magnetometer_z;
 
 		vTaskDelay(pdMS_TO_TICKS(100));
+		//printf("ROLL - acc: %f, gyr: %f\n", roll_accelerometer, roll_gyroscope);
+		//printf("PITCH - acc: %f, gyr: %f\n", pitch_accelerometer, pitch_gyroscope);
+		//printf("YAW - gyr: %f\n", yaw_gyroscope);
+
+		//printf("%f:%f:%f", 0.5*roll_accelerometer + 0.5*roll_gyroscope, 0.5*pitch_accelerometer + 0.5*pitch_gyroscope, yaw_gyroscope);
+		printf("\n");
+	
+		//printf("\n");
+
+		time_since_boot = time;
+
+		vTaskDelay(pdMS_TO_TICKS(100));
 	}
 }
 
@@ -333,13 +406,23 @@ void init_mpu() {
     // Set LPF to 218Hz BW
     write_bytes_mpu(ACCEL_CONFIG2, 1);
 
-    write_bytes_mpu(USER_CTRL_AD, 1);
+    //write_bytes_mag(USER_CTRL_AD, 1);
+	//write_bytes_mag(0X00, 1);
 
-	write_bytes_mpu(INT_PIN_CFG, 1); //0000 0010 in binary, turn on the bypass multiplexer
-	
-	write_bytes_mpu(CNTL1_AD, 1);
+	//write_bytes_mag(INT_PIN_CFG, 1); //0000 0010 in binary, turn on the bypass multiplexer
+	//write_bytes_mag(0x02,true);
+
+	write_bytes_mag(CNTL1_AD, 0x00);
+	vTaskDelay(pdMS_TO_TICKS(100));
+	write_bytes_mag(CNTL1_AD, 0x0F);
+	vTaskDelay(pdMS_TO_TICKS(100));
+	//write_bytes_mag(CNTL1_AD, 0x16);
+	write_bytes_mag(CNTL1_AD,0x1F);
 
 	vTaskDelay(pdMS_TO_TICKS(100));
+
+	write_bytes_mag(MAG_ADDRESS, 1);
+	write_bytes_mag(MPU9250_MAG_X, 1);
 
     uint8_t val;
     // INT enable on RDY
@@ -391,10 +474,24 @@ void user_init(void) {
 	previous_accelerometer_y = accelerometer_y;
 	previous_accelerometer_z = accelerometer_z;
 
+	double roll_accelerometer = 0.0;
 
-	int gyroscope_x = read_bytes_mpu(MPU9250_GYRO_X);
-	int gyroscope_y = read_bytes_mpu(MPU9250_GYRO_Y);
-	int gyroscope_z = read_bytes_mpu(MPU9250_GYRO_Z);
+	// roll surges when the pitch is at 90 percent, this is a hack to fix that issue
+	if (fabs(accelerometer_y) < 0.1 && fabs(accelerometer_z) < 0.1) {
+		roll_accelerometer = 0.0;
+	} else {
+		roll_accelerometer = atan2(accelerometer_x, accelerometer_z) * 180/M_PI;
+	}
+
+	double pitch_accelerometer = atan2(-accelerometer_x, sqrt(accelerometer_y*accelerometer_y + accelerometer_z*accelerometer_z)) * 180/M_PI;
+
+	// Fixes issue when not starting in a horizontal plane
+	pitch_gyroscope = pitch_accelerometer;
+	roll_gyroscope = roll_accelerometer;
+
+	double gyroscope_x = (double) read_bytes_mpu(MPU9250_GYRO_X);
+	double gyroscope_y = (double) read_bytes_mpu(MPU9250_GYRO_Y);
+	double gyroscope_z = (double) read_bytes_mpu(MPU9250_GYRO_Z);
 
 	if (gyroscope_x > 32768) {
 		gyroscope_x -= 65536;

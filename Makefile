@@ -1,6 +1,6 @@
-PROGRAM=mouse
+PROGRAM=test
 
-PROGRAM_SRC_FILES=./mouse.c
+PROGRAM_SRC_FILES=./test.c
 
 #EXTRA_COMPONENTS=extras/rboot-ota extras/i2c extras/mbedtls extras/httpd
 
