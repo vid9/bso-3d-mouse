@@ -17,7 +17,7 @@
 #define ACCEL_CONFIG2   0x1D
 #define INT_PIN_CFG     0x37
 #define INT_ENABLE      0x38
-#define PWR_MGMT_1      0x6B
+#define PWR_MGMT      0x6C
 
 //					mask	returned value
 #define button1		0x20	// 0b ??0? ????
@@ -220,7 +220,7 @@ void mpu_task(void *pvParameters) {
 }
 
 void init_mpu() {
-	write_bytes_mpu(PWR_MGMT_2, 0);
+	write_bytes_mpu(PWR_MGMT, 0);
 
     // bit0 1: Set LPF to 184Hz 0: No LPF, bit6 Stop if fifo full
     write_bytes_mpu(MPU_CONFIG, (1<<6) | 1);
