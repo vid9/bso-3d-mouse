@@ -60,7 +60,7 @@
 #define leds_off	0xff
 
 #define gpio_wemos_led	2
-uint8_t _buffer[21];
+uint8_t _buffer[22];
 float magCalibration[3] = {0, 0, 0};
 
 uint16_t read_bytes_mpu(uint8_t address, uint8_t quantity, uint8_t * table, int size) {
@@ -83,7 +83,7 @@ uint16_t read_bytes_mag(uint8_t quantity) {
 }
 
 void write_bytes_mag(uint8_t register_address, uint8_t data) {
-	i2c_slave_write(BUS_I2C, MPU_ADDRESS, &register_address, &data, 1);
+	i2c_slave_write(BUS_I2C, MAG_ADDRESS, &register_address, &data, 1);
 }
 
 void write_bytes_mpu(uint8_t register_address, uint8_t data) {
@@ -92,20 +92,27 @@ void write_bytes_mpu(uint8_t register_address, uint8_t data) {
 
 void writeAK8963Register(uint8_t subAddress, uint8_t data){
   // set slave 0 to the AK8963 and set for write
-    write_bytes_mag(I2C_SLV0_ADDR,MAG_ADDRESS);
+    write_bytes_mpu(I2C_SLV0_ADDR,MAG_ADDRESS);
 
   // set the register to the desired AK8963 sub address 
-	write_bytes_mag(I2C_SLV0_REG, subAddress);
+	write_bytes_mpu(I2C_SLV0_REG, subAddress);
 
   // store the data for write
-	write_bytes_mag(I2C_SLV0_DO, data);
+	write_bytes_mpu(I2C_SLV0_DO, data);
 
   // enable I2C and send 1 byte
-	write_bytes_mag(I2C_SLV0_CTRL,I2C_SLV0_EN | (uint8_t)1);
+	write_bytes_mpu(I2C_SLV0_CTRL,I2C_SLV0_EN | (uint8_t)1);
   }
 
 void initAK8963(float * destination) {
+
+    write_bytes_mpu(USER_CTRL_AD,I2C_MST_EN);
     writeAK8963Register(CNTL1_AD, PWR_DOWN);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    writeAK8963Register(CNTL1_AD,CNT_MEAS2_AD);
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    /*
     write_bytes_mpu(PWR_MGMT_1, PWR_RESET);
     vTaskDelay(pdMS_TO_TICKS(1));
     writeAK8963Register(CNTL2_AD, RESET);
@@ -126,32 +133,25 @@ void initAK8963(float * destination) {
     vTaskDelay(pdMS_TO_TICKS(100));
     write_bytes_mpu(PWR_MGMT_1,CLOCK_SEL_PLL);
     read_bytes_mpu(MPU_ADDRESS,AK8963_HXL,&_buffer[0],7);
+    */
+}
 
-    /*
-  uint8_t rawData[3];  // x/y/z gyro calibration data stored here
-  write_bytes_mag(CNTL1_AD, 0x00); // Power down magnetometer  
-  vTaskDelay(pdMS_TO_TICKS(10));
+uint16_t read_bytes(uint8_t quantity) {
+	uint8_t data_high, data_low;
+    int8_t register_address = quantity;
+	i2c_slave_read(BUS_I2C, MPU_ADDRESS, &register_address, &data_low, 1);
+	register_address++;
+	i2c_slave_read(BUS_I2C, MPU_ADDRESS, &register_address, &data_high, 1);
 
-  write_bytes_mag(CNTL1_AD, 0x0F); // Enter Fuse ROM access mode
-  vTaskDelay(pdMS_TO_TICKS(10));
-
-  read_bytes_mpu(MAG_ADDRESS, ASAX_AD, &rawData[0], 3);  // Read the x-, y-, and z-axis calibration values
-  destination[0] =  (float)(rawData[0] - 128)/256. + 1.;   // Return x-axis sensitivity adjustment values, etc.
-  destination[1] =  (float)(rawData[1] - 128)/256. + 1.;  
-  destination[2] =  (float)(rawData[2] - 128)/256. + 1.; 
-  write_bytes_mag(CNTL1_AD, 0x00); // Power down magnetometer  
-  vTaskDelay(pdMS_TO_TICKS(10));
-  // Configure the magnetometer for continuous read and highest resolution
-  // set Mscale bit 4 to 1 (0) to enable 16 (14) bit resolution in CNTL register,
-  // and enable continuous mode data acquisition Mmode (bits [3:0]), 0010 for 8 Hz and 0110 for 100 Hz sample rates
-  write_bytes_mag(CNTL1_AD, 0 << 4 | 0x06); // Set magnetometer data resolution and sample ODR
-*/
+	return (data_high << 8) + data_low;
 }
 
 void mpu_task(void *pvParameters) {
+    read_bytes_mag(0x02);
 	while (1) {
 		// turn off Wemos led
-        if (read_bytes_mpu(MPU_ADDRESS, 0x3b, &_buffer[0], 21) > 0) {
+        writeAK8963Register(0x3b, _buffer[0]);
+        if (read_bytes_mpu(MPU_ADDRESS, 0x3b, &_buffer[0], 22) > 0) {
             /*
             printf("Accel_x: %d \n", (((int16_t)_buffer[0]) << 8) | _buffer[1]);
             printf("Accel_y: %d \n", (((int16_t)_buffer[2]) << 8) | _buffer[3]);
@@ -161,11 +161,16 @@ void mpu_task(void *pvParameters) {
             printf("Gyro_y: %d \n", (((int16_t)_buffer[10]) << 8) | _buffer[11]);
             printf("Gyro_z: %d \n", (((int16_t)_buffer[12]) << 8) | _buffer[13]);
             */
+            write_bytes_mag(0x0A,0x01); 
+            printf("Mag_x: %d \n", read_bytes(0x03));
+            printf("Mag_y: %d \n", read_bytes(0x05));
+            printf("Mag_z: %d \n", read_bytes(0x07));
+            printf("\n");
+
+            /*
             printf("Mag_x: %d \n", (((int16_t)_buffer[15]) << 8) | _buffer[14]);
             printf("Mag_y: %d \n", (((int16_t)_buffer[17]) << 8) | _buffer[16]);
             printf("Mag_z: %d \n", (((int16_t)_buffer[19]) << 8) | _buffer[18]);
-            printf("\n");
-            /*
             printf("Dest_x: %d \n", (int16_t)magCalibration[0]);
             printf("Dest_y: %d \n", (int16_t)magCalibration[1]);
             printf("Dest_z: %d \n", (int16_t)magCalibration[2]);
@@ -190,7 +195,13 @@ void user_init(void) {
 	gpio_write(gpio_wemos_led, 1);
 
     write_bytes_mpu(INT_ENABLE, 0x01);
-    initAK8963(magCalibration);
+    write_bytes_mpu(0x37,0x02);
+    write_bytes_mag(0x0A,0x01);
+
+    //writeAK8963Register(CNTL1_AD,PWR_DOWN);
+    //vTaskDelay(pdMS_TO_TICKS(100));
+
+    //initAK8963(magCalibration);
 
 	// create mpu task
 	xTaskCreate(mpu_task, "MPU-9250 task", 1000, NULL, 1, NULL);
