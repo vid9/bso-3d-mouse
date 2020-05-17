@@ -131,32 +131,53 @@ void pcf_task(void *pvParameters) {
 	while (1) {
 		pcf_byte = read_byte_pcf();
 
-		button_1_pressed = (pcf_byte & button1) == 0;
-		button_2_pressed = (pcf_byte & button2) == 0;
-		button_3_pressed = (pcf_byte & button3) == 0;
+		bool button_1_pressed_temp = (pcf_byte & button1) == 0;
+		bool button_2_pressed_temp = (pcf_byte & button2) == 0;
+		bool button_3_pressed_temp = (pcf_byte & button3) == 0;
 
 		uint8_t lled = leds_off;
 
-		if (button_1_pressed == 1) {
+		if (button_1_pressed_temp == 1) {
 			lled &= led1; 
 		} else {
 			lled |= 0x08;
 		}
 
-		if (button_2_pressed == 1) {
+		if (button_2_pressed_temp == 1) {
 			lled &= led2; 
 		} else {
 			lled |= 0x02;
 		}
 
-		if (button_3_pressed == 1) {
+		if (button_3_pressed_temp == 1) {
 			lled &= led3;
 		} else {
 			lled |= 0x04;
 		}
 		
-		
 		write_byte_pcf(lled);
+
+		if (!button_1_pressed && button_1_pressed_temp) {
+			printf("mouse|left_click:down\n");
+		} else if (button_1_pressed && !button_1_pressed_temp) {
+			printf("mouse|left_click:up\n");
+		}
+
+		if (!button_2_pressed && button_2_pressed_temp) {
+			printf("mouse|middle_click:down\n");
+		} else if (button_2_pressed && !button_2_pressed_temp) {
+			printf("mouse|middle_click:up\n");
+		}
+
+		if (!button_3_pressed && button_3_pressed_temp) {
+			printf("mouse|right_click:down\n");
+		} else if (button_3_pressed && !button_3_pressed_temp) {
+			printf("mouse|right_click:up\n");
+		}
+
+		button_1_pressed = button_1_pressed_temp;
+		button_2_pressed = button_2_pressed_temp;
+		button_3_pressed = button_3_pressed_temp;
 
 		vTaskDelay(pdMS_TO_TICKS(50));
 	}
@@ -370,23 +391,21 @@ void mpu_task(void *pvParameters) {
 		smoothed_magnetometer_y = smoothed_magnetometer_y/magnetometer_cache_size;
 		smoothed_magnetometer_z = smoothed_magnetometer_z/magnetometer_cache_size;
 
-		printf("Mag_x: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_x, magnetometer_x, smoothed_magnetometer_x - previous_magnetometer_x);
-		printf("Mag_y: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_y, magnetometer_y, smoothed_magnetometer_y - previous_magnetometer_y);
-		printf("Mag_z: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_z, magnetometer_z, smoothed_magnetometer_z - previous_magnetometer_z);
+		//printf("Mag_x: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_x, magnetometer_x, smoothed_magnetometer_x - previous_magnetometer_x);
+		//printf("Mag_y: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_y, magnetometer_y, smoothed_magnetometer_y - previous_magnetometer_y);
+		//printf("Mag_z: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_z, magnetometer_z, smoothed_magnetometer_z - previous_magnetometer_z);
 		
-		printf("\n");
+		//printf("\n");
 		
 		previous_magnetometer_x = smoothed_magnetometer_x;
 		previous_magnetometer_y = smoothed_magnetometer_y;
 		previous_magnetometer_z = smoothed_magnetometer_z;
 
-		vTaskDelay(pdMS_TO_TICKS(100));
-
 		//printf("ROLL - acc: %f, gyr: %f\n", roll_accelerometer, roll_gyroscope);
 		//printf("PITCH - acc: %f, gyr: %f\n", pitch_accelerometer, pitch_gyroscope);
 		//printf("YAW - gyr: %f\n", yaw_gyroscope);
 
-		printf("%f:%f:%f", 0.5*roll_accelerometer + 0.5*roll_gyroscope, 0.5*pitch_accelerometer + 0.5*pitch_gyroscope, yaw_gyroscope);
+		printf("position|%f:%f:%f", 0.5*roll_accelerometer + 0.5*roll_gyroscope, 0.5*pitch_accelerometer + 0.5*pitch_gyroscope, yaw_gyroscope);
 		printf("\n");
 	
 		//printf("\n");
