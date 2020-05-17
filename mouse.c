@@ -12,18 +12,28 @@
 #define SCL 14
 #define SDA 12
 
-#define SMPLRT_DIV      	0x19
-#define MPU_CONFIG      	0x1A
-#define GYRO_CONFIG     	0x1B
-#define ACCEL_CONFIG    	0x1C
-#define ACCEL_CONFIG2   	0x1D
-#define INT_PIN_CFG     	0x37
-#define INT_ENABLE      	0x38
-#define DATA_READY_MASK 	0x01
-#define MAGIC_OVERFLOW_MASK 0x8
-#define PWR_MGMT      		0x6C
-#define USER_CTRL_AD 		0x6A
-#define CNTL1_AD 			0x0A 
+#define SMPLRT_DIV      0x19
+#define MPU_CONFIG      0x1A
+#define GYRO_CONFIG     0x1B
+#define ACCEL_CONFIG    0x1C
+#define ACCEL_CONFIG2   0x1D
+#define INT_PIN_CFG     0x37
+#define INT_ENABLE      0x38
+#define PWR_MGMT      	0x6C
+#define PWR_MGMT_1  	0x6B
+
+#define AK8963_ADDRESS  0x0C
+#define AK8963_RA_HXL   0x03
+#define AK8963_RA_CNTL1 0x0A
+#define AK8963_RA_ASAX  0x10
+
+#define MAG_MODE_POWERDOWN        0x0
+#define MAG_MODE_SINGLE           0x1
+#define MAG_MODE_CONTINUOUS_8HZ   0x2
+#define MAG_MODE_EXTERNAL         0x4
+#define MAG_MODE_CONTINUOUS_100HZ 0x6
+#define MAG_MODE_SELFTEST         0x8
+#define MAG_MODE_FUSEROM          0xF
 
 //					mask	returned value
 #define button1		0x20	// 0b ??0? ????
@@ -39,6 +49,12 @@
 #define leds_off	0xff
 
 #define gpio_wemos_led	2
+
+uint8_t magBuf[7];
+uint8_t magXAdjust, magYAdjust, magZAdjust;
+int16_t magXOffset, magYOffset, magZOffset;
+
+const float Pi = 3.14159;
 
 typedef enum {
 	MPU9250_ACCEL_X = 0x3b,
@@ -105,6 +121,47 @@ bool button_3_pressed = 0;
 
 int time_since_boot = 0;
 
+// read 2 bytes from MAGNETOMETER on I2C bus
+uint16_t read_bytes_mag(mpu9250_quantity quantity) {
+
+	// high and low byte of quantity
+	uint8_t data_high, data_low;
+	uint8_t register_address = (uint8_t) quantity;
+
+	i2c_slave_read(BUS_I2C, MAG_ADDRESS, &register_address, &data_low, 1);
+	register_address++;
+	i2c_slave_read(BUS_I2C, MAG_ADDRESS, &register_address, &data_high, 1);
+
+	return (data_high << 8) + data_low;
+}
+
+void read_bytes_mag_n(uint8_t register_address, uint8_t * data, int size) {
+	i2c_slave_read(BUS_I2C, MAG_ADDRESS, &register_address, data, size);
+}
+
+void write_bytes_mag(uint8_t register_address, uint8_t data) {
+	i2c_slave_write(BUS_I2C, MAG_ADDRESS, &register_address, &data, 1);
+}
+
+// read 2 bytes from MPU-9250 on I2C bus
+uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
+
+	// high and low byte of quantity
+	uint8_t data_high, data_low;
+	uint8_t register_address = (uint8_t) quantity;
+
+	i2c_slave_read(BUS_I2C, MPU_ADDRESS, &register_address, &data_high, 1);
+	register_address++;
+	i2c_slave_read(BUS_I2C, MPU_ADDRESS, &register_address, &data_low, 1);
+
+	return (data_high << 8) + data_low;
+}
+
+void write_bytes_mpu(uint8_t register_address, uint8_t data) {
+	i2c_slave_write(BUS_I2C, MPU_ADDRESS, &register_address, &data, 1);
+}
+
+
 // write byte to PCF on I2C bus
 void write_byte_pcf(uint8_t data) {
 	i2c_slave_write(BUS_I2C, PCF_ADDRESS, NULL, &data, 1);
@@ -155,41 +212,78 @@ void pcf_task(void *pvParameters) {
 	}
 }
 
-// read 2 bytes from MAGNETOMETER on I2C bus
-uint16_t read_bytes_mag(mpu9250_quantity quantity) {
-
-	// high and low byte of quantity
-	uint8_t data_high, data_low;
-	uint8_t register_address = (uint8_t) quantity;
-
-	i2c_slave_read(BUS_I2C, MAG_ADDRESS, &register_address, &data_high, 1);
-	register_address++;
-	i2c_slave_read(BUS_I2C, MAG_ADDRESS, &register_address, &data_low, 1);
-
-	return (data_high << 8) + data_low;
+int16_t mag_get(uint8_t highIndex, uint8_t lowIndex) {
+  return (((int16_t) magBuf[highIndex]) << 8) | magBuf[lowIndex];
 }
 
-// read 2 bytes from MPU-9250 on I2C bus
-uint16_t read_bytes_mpu(mpu9250_quantity quantity) {
-
-	// high and low byte of quantity
-	uint8_t data_high, data_low;
-	uint8_t register_address = (uint8_t) quantity;
-
-	i2c_slave_read(BUS_I2C, MPU_ADDRESS, &register_address, &data_high, 1);
-	register_address++;
-	i2c_slave_read(BUS_I2C, MPU_ADDRESS, &register_address, &data_low, 1);
-
-	return (data_high << 8) + data_low;
+float adjust_mag_value(int16_t value, uint8_t adjust) {
+  return ((float) value * (((((float) adjust - 128) * 0.5) / 128) + 1));
 }
 
-void write_bytes_mpu(uint8_t register_address, uint8_t data) {
-	i2c_slave_write(BUS_I2C, MPU_ADDRESS, &register_address, &data, 1);
+double magZ() {
+  return adjust_mag_value(mag_get(5, 4), magZAdjust) + magZOffset;
 }
 
-void write_bytes_mag(uint8_t register_address, uint8_t data) {
-	i2c_slave_write(BUS_I2C, MAG_ADDRESS, &register_address, &data, 1);
+double magY() {
+  return adjust_mag_value(mag_get(3, 2), magYAdjust) + magYOffset;
 }
+
+double magX() {
+  return adjust_mag_value(mag_get(1, 0), magXAdjust) + magXOffset;
+}
+
+void mag_set_mode(uint8_t mode) {
+  write_bytes_mag(AK8963_RA_CNTL1, mode);
+  vTaskDelay(pdMS_TO_TICKS(10));
+}
+
+void mag_read_adjust_values() {
+  mag_set_mode(MAG_MODE_POWERDOWN);
+  mag_set_mode(MAG_MODE_FUSEROM);
+  uint8_t buff[3];
+  read_bytes_mag_n(AK8963_RA_ASAX, &buff[0], 3);
+  magXAdjust = buff[0];
+  magYAdjust = buff[1];
+  magZAdjust = buff[2];
+}
+
+void mag_wakeup() {
+  unsigned char bits;
+  bits = read_bytes_mpu(PWR_MGMT_1);
+  bits &= 0x70; // Turn off SLEEP, STANDBY, CYCLE
+  write_bytes_mpu(PWR_MGMT_1, bits);
+  vTaskDelay(pdMS_TO_TICKS(10));
+}
+
+void mag_enable_slave_mode() {
+  unsigned char bits;
+  bits = read_bytes_mpu(INT_PIN_CFG);
+  bits |= 0x1F; // Activate BYPASS_EN
+  write_bytes_mpu(INT_PIN_CFG, bits);
+  vTaskDelay(pdMS_TO_TICKS(10));
+}
+
+
+float mag_horiz_direction() {
+  return atan2(magX(), magY()) * 180 / Pi;
+}
+
+void mag_update() {
+  read_bytes_mag_n(AK8963_RA_HXL, &magBuf[0], 7);
+}
+
+void begin_mag(uint8_t mode) {
+  //beginWireIfNull();
+  mag_wakeup();
+  mag_enable_slave_mode();
+
+  mag_read_adjust_values();
+  mag_set_mode(MAG_MODE_POWERDOWN);
+  mag_set_mode(mode);
+  vTaskDelay(pdMS_TO_TICKS(10));
+}
+
+
 
 // check MPU-9250 sensor values
 void mpu_task(void *pvParameters) {
@@ -331,9 +425,10 @@ void mpu_task(void *pvParameters) {
 		previous_gyroscope_y = smoothed_gyroscope_y;
 		previous_gyroscope_z = smoothed_gyroscope_z;
 
-		double magnetometer_x = read_bytes_mag(MPU9250_MAG_X);
-		double magnetometer_y = read_bytes_mag(MPU9250_MAG_Y);
-		double magnetometer_z = read_bytes_mag(MPU9250_MAG_Z);
+		mag_update();
+		double magnetometer_x = magX();
+		double magnetometer_y = magY();
+		double magnetometer_z = magZ();
 
 		for (int i = 0; i < magnetometer_cache_size; i++) {
 			if (i == (magnetometer_cache_size - 1)) {
@@ -435,6 +530,13 @@ void init_mpu() {
     write_bytes_mpu(INT_PIN_CFG, val);
 }
 
+void init_mag() {
+	begin_mag(MAG_MODE_CONTINUOUS_8HZ);
+    magXOffset = -20;
+    magYOffset = 85;
+    magZOffset = -70;
+}
+
 void user_init(void) {
 
 	uart_set_baud(0, 115200);
@@ -447,6 +549,7 @@ void user_init(void) {
 	gpio_write(gpio_wemos_led, 1);
 
 	init_mpu();
+	init_mag();
 
 	double accelerometer_x = ((double) read_bytes_mpu(MPU9250_ACCEL_X) - accelerometer_x_bias) / accelerometer_scale;
 	double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y) - accelerometer_y_bias) / accelerometer_scale;
@@ -515,10 +618,13 @@ void user_init(void) {
 	previous_gyroscope_y = gyroscope_y;
 	previous_gyroscope_z = gyroscope_z;
 
+	//double magnetometer_x = read_bytes_mag(MPU9250_MAG_X);
+	//double magnetometer_y = read_bytes_mag(MPU9250_MAG_Y);
+	//double magnetometer_z = read_bytes_mag(MPU9250_MAG_Z);
 
-	double magnetometer_x = read_bytes_mag(MPU9250_MAG_X);
-	double magnetometer_y = read_bytes_mag(MPU9250_MAG_Y);
-	double magnetometer_z = read_bytes_mag(MPU9250_MAG_Z);
+	double magnetometer_x = magX();
+	double magnetometer_y = magY();
+	double magnetometer_z = magZ();
 
 	for (int i = 0; i < magnetometer_cache_size; i++) {
 		if (i == (magnetometer_cache_size - 1)) {
