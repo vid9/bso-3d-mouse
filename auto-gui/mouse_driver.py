@@ -37,7 +37,7 @@ def position_event_handler(data):
         x_position = screen_width
 
     y_position += float(pitch)*pitch_mapping
-    print(y_position)
+
     if y_position < 0:
         y_position = 0
     elif y_position > screen_height:
@@ -53,7 +53,7 @@ def position_event_handler(data):
 
 
 ser = serial.Serial(
-    port='COM3',
+    port='COM4',
     baudrate=115200)
 
 print("Connected to: " + ser.portstr)

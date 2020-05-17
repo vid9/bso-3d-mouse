@@ -437,7 +437,6 @@ void mpu_task(void *pvParameters) {
 		//printf("Gyro_y: %d | raw: %d | delta from previous: %d\n", smoothed_gyroscope_y, gyroscope_y, smoothed_gyroscope_y - previous_gyroscope_y);
 		//printf("Gyro_z: %d | raw: %d | delta from previous: %d\n", smoothed_gyroscope_z, gyroscope_z, smoothed_gyroscope_z - previous_gyroscope_z);
 		
-		printf("\n");
 		int dt = time - time_since_boot;
 
 		//printf("delta: %f\n", ((smoothed_gyroscope_x*dt)/gyroscope_scale) - (previous_gyroscope_x*dt)/gyroscope_scale);
@@ -510,13 +509,14 @@ void mpu_task(void *pvParameters) {
 		previous_magnetometer_x = smoothed_magnetometer_x;
 		previous_magnetometer_y = smoothed_magnetometer_y;
 		previous_magnetometer_z = smoothed_magnetometer_z;
+
 		//printf("ROLL - acc: %f, gyr: %f\n", roll_accelerometer, roll_gyroscope);
 		//printf("PITCH - acc: %f, gyr: %f\n", pitch_accelerometer, pitch_gyroscope);
 		//printf("YAW - gyr: %f\n", yaw_gyroscope);
-		double yaw_accelometer = atan2((-magnetometer_y*cos(roll_accelerometer) + magnetometer_z*sin(roll_accelerometer)),(magnetometer_x*cos(pitch_accelerometer) + magnetometer_y*sin(pitch_accelerometer)*sin(roll_accelerometer)+ magnetometer_z*sin(pitch_accelerometer)*cos(roll_accelerometer))); 
 
+		double yaw_accelerometer = atan2((-magnetometer_y*cos(roll_accelerometer) + magnetometer_z*sin(roll_accelerometer)),(magnetometer_x*cos(pitch_accelerometer) + magnetometer_y*sin(pitch_accelerometer)*sin(roll_accelerometer)+ magnetometer_z*sin(pitch_accelerometer)*cos(roll_accelerometer))); 
 
-		printf("position|%f:%f:%f", 0.5*roll_accelerometer + 0.5*roll_gyroscope, 0.5*pitch_accelerometer + 0.5*pitch_gyroscope, 0.5*yaw_gyroscope + 0.5*yaw_accelometer);
+		printf("position|%f:%f:%f", 0.5*roll_accelerometer + 0.5*roll_gyroscope, 0.5*pitch_accelerometer + 0.5*pitch_gyroscope, yaw_gyroscope);
 		//printf("%f:%f:%f", 0.5*roll_accelerometer + 0.5*roll_gyroscope, 0.5*pitch_accelerometer + 0.5*pitch_gyroscope, yaw_gyroscope);
 		printf("\n");
 	
