@@ -7,6 +7,7 @@
 
 #define PCF_ADDRESS	0x38
 #define MPU_ADDRESS	0x68
+#define MAG_ADDRESS	0x0C
 #define BUS_I2C		0
 #define SCL 14
 #define SDA 12
@@ -19,6 +20,10 @@
 #define INT_PIN_CFG     0x37
 #define INT_ENABLE      0x38
 #define PWR_MGMT      0x6C
+
+
+#define CNTL1_AD 			0x0A
+#define DATA_READY_MASK 	0x01
 
 //					mask	returned value
 #define button1		0x20	// 0b ??0? ????
@@ -46,7 +51,10 @@ typedef enum {
 	MPU9250_TEMP = 0x41,
 	MPU9250_GYRO_X = 0x43,
 	MPU9250_GYRO_Y = 0x45,
-	MPU9250_GYRO_Z = 0x47
+	MPU9250_GYRO_Z = 0x47,	
+	MPU9250_MAG_X = 0x03,
+	MPU9250_MAG_Y = 0x05,
+	MPU9250_MAG_Z = 0x07
 } mpu9250_quantity;
 
 #define accelerometer_scale 2000.0
@@ -59,11 +67,16 @@ typedef enum {
 #define gyroscope_y_bias 0.0
 #define gyroscope_z_bias 0.0
 
+#define magnetometer_x_bias 0.0
+#define magnetometer_y_bias 0.0
+#define magnetometer_z_bias 0.0
+
 #define gyroscope_rotation_threshold 0.005
 #define gyroscope_scale 16384.0
 
 #define accelerometer_cache_size 20
 #define gyroscope_cache_size 1
+#define magnetometer_cache_size 2
 
 double accelerometer_x_values[accelerometer_cache_size];
 double accelerometer_y_values[accelerometer_cache_size];
@@ -80,6 +93,14 @@ double gyroscope_z_values[gyroscope_cache_size];
 double previous_gyroscope_x;
 double previous_gyroscope_y;
 double previous_gyroscope_z;
+
+double magnetometer_x_values[magnetometer_cache_size];
+double magnetometer_y_values[magnetometer_cache_size];
+double magnetometer_z_values[magnetometer_cache_size];
+
+double previous_magnetometer_x;
+double previous_magnetometer_y;
+double previous_magnetometer_z;
 
 double pitch_gyroscope = 0;
 double roll_gyroscope = 0;
@@ -139,6 +160,24 @@ void pcf_task(void *pvParameters) {
 
 		vTaskDelay(pdMS_TO_TICKS(50));
 	}
+}
+
+// read 2 bytes from MAGNETOMETER on I2C bus
+uint16_t read_bytes_mag(mpu9250_quantity quantity) {
+
+	// high and low byte of quantity
+	uint8_t data_high, data_low;
+	uint8_t register_address = (uint8_t) quantity;
+
+	i2c_slave_read(BUS_I2C, MAG_ADDRESS, &register_address, &data_low, 1);
+	register_address++;
+	i2c_slave_read(BUS_I2C, MAG_ADDRESS, &register_address, &data_high, 1);
+
+	return (data_high << 8) + data_low;
+}
+
+void write_bytes_mag(uint8_t register_address, uint8_t data) {
+	i2c_slave_write(BUS_I2C, MAG_ADDRESS, &register_address, &data, 1);
 }
 
 // read 2 bytes from MPU-9250 on I2C bus
@@ -297,6 +336,52 @@ void mpu_task(void *pvParameters) {
 		previous_gyroscope_y = smoothed_gyroscope_y;
 		previous_gyroscope_z = smoothed_gyroscope_z;
 
+		
+		write_bytes_mag(CNTL1_AD, DATA_READY_MASK);
+		double magnetometer_x = read_bytes_mag(MPU9250_MAG_X);
+		write_bytes_mag(CNTL1_AD, DATA_READY_MASK);
+		double magnetometer_y = read_bytes_mag(MPU9250_MAG_Y);
+		write_bytes_mag(CNTL1_AD, DATA_READY_MASK);
+		double magnetometer_z = read_bytes_mag(MPU9250_MAG_Z);
+
+		for (int i = 0; i < magnetometer_cache_size; i++) {
+			if (i == (magnetometer_cache_size - 1)) {
+				magnetometer_x_values[i] = magnetometer_x;
+				magnetometer_y_values[i] = magnetometer_y;
+				magnetometer_z_values[i] = magnetometer_z;
+			} else {
+				magnetometer_x_values[i] = magnetometer_x_values[i + 1];
+				magnetometer_y_values[i] = magnetometer_y_values[i + 1];
+				magnetometer_z_values[i] = magnetometer_z_values[i + 1];
+			}
+		}
+
+		double smoothed_magnetometer_x = 0;
+		double smoothed_magnetometer_y = 0;
+		double smoothed_magnetometer_z = 0;
+
+		for (int i = 0; i < magnetometer_cache_size; i++) {
+			smoothed_magnetometer_x += magnetometer_x_values[i];
+			smoothed_magnetometer_y += magnetometer_y_values[i];
+			smoothed_magnetometer_z += magnetometer_z_values[i];
+		}
+
+		smoothed_magnetometer_x = smoothed_magnetometer_x/magnetometer_cache_size;
+		smoothed_magnetometer_y = smoothed_magnetometer_y/magnetometer_cache_size;
+		smoothed_magnetometer_z = smoothed_magnetometer_z/magnetometer_cache_size;
+
+		printf("Mag_x: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_x, magnetometer_x, smoothed_magnetometer_x - previous_magnetometer_x);
+		printf("Mag_y: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_y, magnetometer_y, smoothed_magnetometer_y - previous_magnetometer_y);
+		printf("Mag_z: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_z, magnetometer_z, smoothed_magnetometer_z - previous_magnetometer_z);
+		
+		printf("\n");
+		
+		previous_magnetometer_x = smoothed_magnetometer_x;
+		previous_magnetometer_y = smoothed_magnetometer_y;
+		previous_magnetometer_z = smoothed_magnetometer_z;
+
+		vTaskDelay(pdMS_TO_TICKS(100));
+
 		//printf("ROLL - acc: %f, gyr: %f\n", roll_accelerometer, roll_gyroscope);
 		//printf("PITCH - acc: %f, gyr: %f\n", pitch_accelerometer, pitch_gyroscope);
 		//printf("YAW - gyr: %f\n", yaw_gyroscope);
@@ -343,7 +428,7 @@ void init_mpu() {
 void user_init(void) {
 
 	uart_set_baud(0, 115200);
-	i2c_init(BUS_I2C, SCL, SDA, I2C_FREQ_100K);
+	i2c_init(BUS_I2C, SCL, SDA, I2C_FREQ_400K);
 	// fix i2c driver to work with MPU-9250
 	gpio_enable(SCL, GPIO_OUTPUT);
 
@@ -352,6 +437,7 @@ void user_init(void) {
 	gpio_write(gpio_wemos_led, 1);
 
 	init_mpu();
+	write_bytes_mag(CNTL1_AD,DATA_READY_MASK);
 
 	double accelerometer_x = ((double) read_bytes_mpu(MPU9250_ACCEL_X) - accelerometer_x_bias) / accelerometer_scale;
 	double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y) - accelerometer_y_bias) / accelerometer_scale;
@@ -419,6 +505,26 @@ void user_init(void) {
 	previous_gyroscope_x = gyroscope_x;
 	previous_gyroscope_y = gyroscope_y;
 	previous_gyroscope_z = gyroscope_z;
+
+	double magnetometer_x = read_bytes_mag(MPU9250_MAG_X);
+	double magnetometer_y = read_bytes_mag(MPU9250_MAG_Y);
+	double magnetometer_z = read_bytes_mag(MPU9250_MAG_Z);
+
+	for (int i = 0; i < magnetometer_cache_size; i++) {
+		if (i == (magnetometer_cache_size - 1)) {
+			magnetometer_x_values[i] = magnetometer_x;
+			magnetometer_y_values[i] = magnetometer_y;
+			magnetometer_z_values[i] = magnetometer_z;
+		} else {
+			magnetometer_x_values[i] = magnetometer_x_values[i + 1];
+			magnetometer_y_values[i] = magnetometer_y_values[i + 1];
+			magnetometer_z_values[i] = magnetometer_z_values[i + 1];
+		}
+	}
+
+	previous_magnetometer_x = magnetometer_x;
+	previous_magnetometer_y = magnetometer_y;
+	previous_magnetometer_z = magnetometer_z;
 
 	// create pcf task
 	xTaskCreate(pcf_task, "PCF task", 1000, NULL, 2, NULL);
