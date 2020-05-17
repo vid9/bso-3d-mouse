@@ -58,6 +58,7 @@ uint8_t magBuf[7];
 uint8_t magXAdjust, magYAdjust, magZAdjust;
 int16_t magXOffset, magYOffset, magZOffset;
 
+
 const float Pi = 3.14159;
 
 typedef enum {
@@ -332,7 +333,7 @@ void mpu_task(void *pvParameters) {
 		double accelerometer_x = ((double) read_bytes_mpu(MPU9250_ACCEL_X) - accelerometer_x_bias) / accelerometer_scale;
 		double accelerometer_y = ((double) read_bytes_mpu(MPU9250_ACCEL_Y) - accelerometer_y_bias) / accelerometer_scale;
 		double accelerometer_z = ((double) read_bytes_mpu(MPU9250_ACCEL_Z) - accelerometer_z_bias) / accelerometer_scale;
-
+		
 		if (accelerometer_x > 16) {
 			accelerometer_x -= 32.76;
 		}
@@ -393,7 +394,7 @@ void mpu_task(void *pvParameters) {
 		double gyroscope_x = (double) read_bytes_mpu(MPU9250_GYRO_X);
 		double gyroscope_y = (double) read_bytes_mpu(MPU9250_GYRO_Y);
 		double gyroscope_z = (double) read_bytes_mpu(MPU9250_GYRO_Z);
-
+		
 		if (gyroscope_x > 32768) {
 			gyroscope_x -= 65536;
 		}
@@ -494,10 +495,16 @@ void mpu_task(void *pvParameters) {
 		smoothed_magnetometer_y = smoothed_magnetometer_y/magnetometer_cache_size;
 		smoothed_magnetometer_z = smoothed_magnetometer_z/magnetometer_cache_size;
 
+		double magnetometer_norm = sqrt((magnetometer_x*magnetometer_x)+(magnetometer_y*magnetometer_y)+(magnetometer_z*magnetometer_z));
+		magnetometer_x = magnetometer_x/magnetometer_norm;
+		magnetometer_y = magnetometer_y/magnetometer_norm;
+		magnetometer_z = magnetometer_z/magnetometer_norm;
+
+		/*
 		printf("Mag_x: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_x, magnetometer_x, smoothed_magnetometer_x - previous_magnetometer_x);
 		printf("Mag_y: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_y, magnetometer_y, smoothed_magnetometer_y - previous_magnetometer_y);
 		printf("Mag_z: %f | raw: %f | delta from previous: %f\n", smoothed_magnetometer_z, magnetometer_z, smoothed_magnetometer_z - previous_magnetometer_z);
-		
+		*/
 		//printf("\n");
 		
 		previous_magnetometer_x = smoothed_magnetometer_x;
@@ -506,12 +513,14 @@ void mpu_task(void *pvParameters) {
 		//printf("ROLL - acc: %f, gyr: %f\n", roll_accelerometer, roll_gyroscope);
 		//printf("PITCH - acc: %f, gyr: %f\n", pitch_accelerometer, pitch_gyroscope);
 		//printf("YAW - gyr: %f\n", yaw_gyroscope);
+		double yaw_accelometer = atan2((-magnetometer_y*cos(roll_accelerometer) + magnetometer_z*sin(roll_accelerometer)),(magnetometer_x*cos(pitch_accelerometer) + magnetometer_y*sin(pitch_accelerometer)*sin(roll_accelerometer)+ magnetometer_z*sin(pitch_accelerometer)*cos(roll_accelerometer))); 
 
-		printf("position|%f:%f:%f", 0.5*roll_accelerometer + 0.5*roll_gyroscope, 0.5*pitch_accelerometer + 0.5*pitch_gyroscope, yaw_gyroscope);
+
+		printf("position|%f:%f:%f", 0.5*roll_accelerometer + 0.5*roll_gyroscope, 0.5*pitch_accelerometer + 0.5*pitch_gyroscope, 0.5*yaw_gyroscope + 0.5*yaw_accelometer);
 		//printf("%f:%f:%f", 0.5*roll_accelerometer + 0.5*roll_gyroscope, 0.5*pitch_accelerometer + 0.5*pitch_gyroscope, yaw_gyroscope);
 		printf("\n");
 	
-		//printf("\n");
+
 
 		time_since_boot = time;
 
@@ -538,6 +547,7 @@ void init_mpu() {
     // Set LPF to 218Hz BW
     write_bytes_mpu(ACCEL_CONFIG2, 1);
 
+/*
     //write_bytes_mag(USER_CTRL_AD, 1);
 	//write_bytes_mag(0X00, 1);
 
@@ -555,7 +565,7 @@ void init_mpu() {
 
 	write_bytes_mag(MAG_ADDRESS, 1);
 	write_bytes_mag(MPU9250_MAG_X, 1);
-
+*/
     uint8_t val;
     // INT enable on RDY
 
